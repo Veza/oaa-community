@@ -1,0 +1,8 @@
+FROM python:3.8
+WORKDIR /oaa
+COPY jira/requirements.txt /oaa/requirements.txt
+RUN pip3 install -r/oaa/requirements.txt
+COPY jira/oaa_jira.py /oaa/
+COPY oaaclient/src /oaa/oaaclient
+ENV PYTHONPATH /oaa
+ENTRYPOINT ["python3", "/oaa/oaa_jira.py"]

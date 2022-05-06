@@ -1,7 +1,7 @@
 #!env python3
 
-from oaaclient.client import OAAClient, OAAClientError, OAAPermission
-from oaaclient.templates import CustomApplication, CustomResource, OAAPropertyType
+from oaaclient.client import OAAClient, OAAClientError
+from oaaclient.templates import CustomApplication, CustomResource, OAAPermission, OAAPropertyType
 from requests import HTTPError
 import argparse
 import logging

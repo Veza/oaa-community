@@ -1,7 +1,6 @@
 from __future__ import annotations
 from typing import Optional
 from enum import Enum
-from oaaclient.client import OAAPermission, OAAIdentityType
 import json
 import re
 
@@ -12,6 +11,27 @@ class OAATemplateException(Exception):
     def __init__(self, message):
         self.message = message
         super().__init__(self.message)
+
+
+class OAAPermission(str, Enum):
+    """ Canonical permissions support by Veza Authorization Framework """
+    DataRead = "DataRead"
+    DataWrite = "DataWrite"
+    DataCreate = "DataCreate"
+    DataDelete = "DataDelete"
+    MetadataRead = "MetadataRead"
+    MetadataWrite = "MetadataWrite"
+    MetadataCreate = "MetadataCreate"
+    MetadataDelete = "MetadataDelete"
+    NonData = "NonData"
+
+
+class OAAIdentityType(str, Enum):
+    """ types of identities for permission mapping """
+    LocalUser = "local_user"
+    LocalGroup = "local_group"
+    LocalRole = "local_role"
+    IdP = "idp"
 
 
 class Provider():

@@ -12,8 +12,8 @@ export VEZA_URL="https://myveza.vezacloud.com"
 ```
 """
 
-from oaaclient.client import OAAClient, OAAClientError, OAAPermission
-from oaaclient.templates import CustomApplication
+from oaaclient.client import OAAClient, OAAClientError
+from oaaclient.templates import CustomApplication, OAAPermission
 import os
 import sys
 

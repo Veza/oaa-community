@@ -1,7 +1,7 @@
 #!env python3
 from looker_permissions import looker_permission_definitions
-from oaaclient.client import OAAClient, OAAClientError, OAAPermission
-from oaaclient.templates import CustomApplication, CustomResource, OAAPropertyType
+from oaaclient.client import OAAClient, OAAClientError
+from oaaclient.templates import CustomApplication, CustomResource, OAAPermission, OAAPropertyType
 from requests import HTTPError
 from urllib.parse import urlparse
 import argparse

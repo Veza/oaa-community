@@ -1,6 +1,6 @@
 #!env python3
-from oaaclient.client import OAAClient, OAAClientError, OAAPermission, OAAIdentityType
-from oaaclient.templates import CustomApplication, CustomPermission, CustomResource
+from oaaclient.client import OAAClient, OAAClientError
+from oaaclient.templates import CustomApplication, OAAPermission
 from requests.exceptions import HTTPError
 from urllib.parse import urlparse
 import argparse

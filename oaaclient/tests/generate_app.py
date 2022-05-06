@@ -1,5 +1,4 @@
-from oaaclient.client import OAAPermission
-from oaaclient.templates import CustomApplication, Tag, OAAPropertyType
+from oaaclient.templates import CustomApplication, Tag, OAAPermission, OAAPropertyType
 
 
 def generate_app():

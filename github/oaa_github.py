@@ -1,6 +1,6 @@
 #!env python3
-from oaaclient.client import OAAClient, OAAClientError, OAAPermission
-from oaaclient.templates import CustomApplication, CustomPermission, OAAPropertyType
+from oaaclient.client import OAAClient, OAAClientError
+from oaaclient.templates import CustomApplication, CustomPermission, OAAPermission, OAAPropertyType
 from pprint import pprint
 from requests import HTTPError
 from time import time

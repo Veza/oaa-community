@@ -18,27 +18,6 @@ class OAAClientError(Exception):
         self.details = details
 
 
-class OAAPermission(str, Enum):
-    """ Canonical permissions support by Veza Authorization Framework """
-    DataRead = "DataRead"
-    DataWrite = "DataWrite"
-    DataCreate = "DataCreate"
-    DataDelete = "DataDelete"
-    MetadataRead = "MetadataRead"
-    MetadataWrite = "MetadataWrite"
-    MetadataCreate = "MetadataCreate"
-    MetadataDelete = "MetadataDelete"
-    NonData = "NonData"
-
-
-class OAAIdentityType(str, Enum):
-    """ types of identities for permission mapping """
-    LocalUser = "local_user"
-    LocalGroup = "local_group"
-    LocalRole = "local_role"
-    IdP = "idp"
-
-
 class OAAClient():
     def __init__(self, url, api_key: str = None, username: str = None, token: str = None):
         if not re.match(r"^https:\/\/.*", url):

@@ -1,4 +1,4 @@
-from oaaclient.client import OAAPermission
+from oaaclient.templates import OAAPermission
 
 looker_permission_definitions = {
     "access_data": [OAAPermission.DataRead],

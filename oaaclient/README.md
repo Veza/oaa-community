@@ -10,8 +10,8 @@ The `oaaclient` SDK consists of two main components:
 
 ### Sample Workflow
 ```python
-from oaaclient.client import OAAClient, OAAPermission
-from oaaclient.templates import CustomApplication
+from oaaclient.client import OAAClient
+from oaaclient.templates import CustomApplication, OAAPermission
 
 # creates a connection class to communicate with Veza
 veza_con = OAAClient(url=veza_url, token=veza_api_key)

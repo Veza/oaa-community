@@ -2,8 +2,7 @@ import pytest
 import json
 import os
 
-from oaaclient.client import OAAPermission, OAAIdentityType
-from oaaclient.templates import CustomApplication, CustomPermission, OAATemplateException, Tag, OAAPropertyType
+from oaaclient.templates import CustomApplication, CustomPermission, OAAPermission, OAAIdentityType, OAATemplateException, Tag, OAAPropertyType
 from generate_app import generate_app, GENERATED_APP_PAYLOAD
 
 

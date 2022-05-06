@@ -1,4 +1,4 @@
-from oaaclient.templates import CustomIdPProvider, OAAPropertyType
+from oaaclient.templates import CustomIdPProvider, OAAPropertyType, IdPProviderType
 
 
 def generate_idp():
@@ -34,10 +34,13 @@ def generate_idp():
     user0001.set_property("cube_number", "East-224")
     user0001.set_property("nick_names", ["The One", "One Dude"])
     user0001.set_property("birthday", "2001-01-01T01:01:01.001Z")
+    user0001.set_source_identity("user0001@corp.example.com", IdPProviderType.OKTA)
+    user0001.add_assumed_role_arns(["arn:aws:iam::123456789:role/BackEnd"])
 
     user0002.department = "Sales"
-    user0001.is_active = False
-    user0001.is_guest = True
+    user0002.is_active = False
+    user0002.is_guest = True
+    user0002.set_source_identity("user0002@corp.example.com", IdPProviderType.AZURE_AD)
 
     group001 = idp.add_group("group001", "Group 001", "g001")
     group001.set_property("owner", "somebody")
@@ -57,6 +60,21 @@ def generate_idp():
 
 GENERATED_IDP_PAYLOAD = """
 {
+  "custom_property_definition": {
+    "domain_properties": {
+      "region": "STRING"
+    },
+    "user_properties": {
+      "contractor": "BOOLEAN",
+      "parking_spaces": "NUMBER",
+      "cube_number": "STRING",
+      "nick_names": "STRING_LIST",
+      "birthday": "TIMESTAMP"
+    },
+    "group_properties": {
+      "owner": "STRING"
+    }
+  },
   "name": "Pytest IdP",
   "idp_type": "pytest",
   "domains": [
@@ -75,15 +93,23 @@ GENERATED_IDP_PAYLOAD = """
       "identity": "0001",
       "full_name": "User 0001",
       "department": "Quality Assurance",
-      "is_active": false,
-      "is_guest": true,
+      "is_active": true,
+      "is_guest": false,
       "manager_id": "0003",
       "groups": [
         {
           "identity": "g001"
         }
       ],
-      "assumed_role_arns": [],
+      "assumed_role_arns": [
+        {
+          "identity": "arn:aws:iam::123456789:role/BackEnd"
+        }
+      ],
+      "source_identity": {
+        "identity": "user0001@corp.example.com",
+        "provider_type": "okta"
+      },
       "tags": [],
       "custom_properties": {
         "contractor": false,
@@ -102,8 +128,8 @@ GENERATED_IDP_PAYLOAD = """
       "identity": "0002",
       "full_name": "User 0002",
       "department": "Sales",
-      "is_active": null,
-      "is_guest": null,
+      "is_active": false,
+      "is_guest": true,
       "manager_id": null,
       "groups": [
         {
@@ -114,6 +140,10 @@ GENERATED_IDP_PAYLOAD = """
         }
       ],
       "assumed_role_arns": [],
+      "source_identity": {
+        "identity": "user0002@corp.example.com",
+        "provider_type": "azure_ad"
+      },
       "tags": [],
       "custom_properties": {}
     },
@@ -135,6 +165,7 @@ GENERATED_IDP_PAYLOAD = """
         }
       ],
       "assumed_role_arns": [],
+      "source_identity": null,
       "tags": [],
       "custom_properties": {}
     },
@@ -153,6 +184,7 @@ GENERATED_IDP_PAYLOAD = """
         }
       ],
       "assumed_role_arns": [],
+      "source_identity": null,
       "tags": [],
       "custom_properties": {}
     },
@@ -171,6 +203,7 @@ GENERATED_IDP_PAYLOAD = """
         }
       ],
       "assumed_role_arns": [],
+      "source_identity": null,
       "tags": [],
       "custom_properties": {}
     },
@@ -185,6 +218,7 @@ GENERATED_IDP_PAYLOAD = """
       "manager_id": null,
       "groups": [],
       "assumed_role_arns": [],
+      "source_identity": null,
       "tags": [],
       "custom_properties": {}
     }

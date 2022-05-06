@@ -38,6 +38,7 @@ def test_custom_idp():
     user002.add_assumed_role_arns(["arn:aws:iam::123456789012:role/role001"])
 
     payload = idp.get_payload()
+    print(json.dumps(payload, indent=2))
 
     expected_result = json.loads(TEST_CUSTOM_IDP_RESULT)
     assert payload == expected_result
@@ -46,6 +47,7 @@ def test_custom_idp():
 def test_generate_idp():
     idp = generate_idp()
     payload = idp.get_payload()
+    print(json.dumps(payload, indent=2))
 
     assert payload == json.loads(GENERATED_IDP_PAYLOAD)
 
@@ -79,10 +81,19 @@ def test_custom_idp_exceptions():
         test_user.add_groups("group01")
     assert e.value.message == "group_identities must be list"
 
+    with pytest.raises(OAATemplateException) as e:
+        test_user.set_source_identity("bob", "somestring")
+    assert e.value.message == "provider_type must be IdPProviderType enum"
+
 
 # expected paylods
 TEST_CUSTOM_IDP_RESULT = """
 {
+  "custom_property_definition": {
+    "domain_properties": {},
+    "user_properties": {},
+    "group_properties": {}
+  },
   "name": "test",
   "idp_type": "test_idp",
   "domains": [
@@ -115,6 +126,7 @@ TEST_CUSTOM_IDP_RESULT = """
           "identity": "arn:aws:iam::123456789012:role/role002"
         }
       ],
+      "source_identity": null,
       "tags": [],
       "custom_properties": {}
     },
@@ -137,6 +149,7 @@ TEST_CUSTOM_IDP_RESULT = """
           "identity": "arn:aws:iam::123456789012:role/role001"
         }
       ],
+      "source_identity": null,
       "tags": [],
       "custom_properties": {}
     },
@@ -158,6 +171,7 @@ TEST_CUSTOM_IDP_RESULT = """
         }
       ],
       "assumed_role_arns": [],
+      "source_identity": null,
       "tags": [],
       "custom_properties": {}
     },
@@ -172,6 +186,7 @@ TEST_CUSTOM_IDP_RESULT = """
       "manager_id": null,
       "groups": [],
       "assumed_role_arns": [],
+      "source_identity": null,
       "tags": [],
       "custom_properties": {}
     }

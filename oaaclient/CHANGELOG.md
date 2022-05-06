@@ -1,5 +1,9 @@
 # OAA Client Change Log
 
+## 2022/04/26
+*   Added `CustomIdPUser.set_source_identity` for setting the source identity of a user. Also added new enum
+    `IdPProviderType` for supported IdP providers. 
+
 ## 2022/4/18
 * `CookiePermission` has been renamed to `OAAPermission`, any references will need to be updated.
 * `CookieIdentityType` has been renamed to `OAAIdentityType`, any references will need to be updated.

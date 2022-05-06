@@ -1060,6 +1060,18 @@ class IdPEntityType(Enum):
     DOMAIN = "DOMAIN"
 
 
+class IdPProviderType(str, Enum):
+    """ Veza supported IdP provider types """
+
+    ACTIVE_DIRECTORY = "active_directory"
+    ANY = "any"
+    AZURE_AD = "azure_ad"
+    CUSTOM = "custom"
+    GOOGLE_WORKSPACE = "google_workspace"
+    OKTA = "okta"
+    ONE_LOGIN = "one_logn"
+
+
 class CustomIdPProvider():
     """
     CustomIdPProvider class for modeling Identity Providers (IdP) using OAA Custom Identity Provider Template.
@@ -1097,6 +1109,7 @@ class CustomIdPProvider():
     def get_payload(self) -> dict:
         """ returns formatted payload as dictionary for JSON conversion and upload """
         payload = {}
+        payload['custom_property_definition'] = self.property_definitions.to_dict()
         payload['name'] = self.name
         payload['idp_type'] = self.idp_type
         payload['domains'] = [self.domain.to_dict()]
@@ -1216,6 +1229,7 @@ class CustomIdPUser():
         self.is_guest = None
         self.manager_id = None
 
+        self.__source_identity = None
         self.__groups = {}
         self.__assumed_roles = {}
         self.__tags = []
@@ -1240,10 +1254,26 @@ class CustomIdPUser():
         user['groups'] = [g for g in self.__groups.values()]
         user['assumed_role_arns'] = [r for r in self.__assumed_roles.values()]
 
+        user['source_identity'] = self.__source_identity
         user['tags'] = self.__tags
         user['custom_properties'] = self.__properties
 
         return user
+
+    def set_source_identity(self, identity: str, provider_type: IdPProviderType) -> None:
+        """ Set an source external identity for user. Source identity will connect CustomIdP user to source IdP user.
+        Provider type limits scope for finding identity, can search all providers with `IdPProviderType.ANY`.
+
+        Args:
+            identity (str): Unique Identity of the source identity
+            provider_type (IdPProviderType): Type for provider to match source identity from
+
+        """
+        if not isinstance(provider_type, IdPProviderType):
+            raise OAATemplateException("provider_type must be IdPProviderType enum")
+
+        self.__source_identity = {"identity": identity, "provider_type": provider_type}
+        return None
 
     def add_assumed_role_arns(self, arns: list[str]) -> None:
         """ add AWS Roles to list of roles user can assume by arn

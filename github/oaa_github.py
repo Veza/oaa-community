@@ -228,8 +228,15 @@ class OAAGitHub():
 
     def discover_repo(self, repo):
         """ populate the OAA app with the access details for a given repo, takes in GitHub repo information dictionary"""
+
         # add the repository to the OAA model, will create a CustomResource for each repo
-        self.app.add_resource(name=repo['name'], resource_type="repository", description=repo['description'])
+        self.app.add_resource(name=repo['name'], resource_type="repository")
+
+        if repo['description'] and len(repo['description']) > 256:
+            # OAA description max length is 256, GitHub's description could be longer, truncate
+            self.app.resources[repo['name']].description = repo['description'][:255]
+        else:
+            self.app.resources[repo['name']].description = repo['description']
 
         # get the full name of the repository (oprg/repo) to make getting the repo details easier
         full_name = repo['full_name']

@@ -1,7 +1,9 @@
 #!env python3
+from datetime import datetime
 from oaaclient.client import OAAClient, OAAClientError
 from oaaclient.templates import CustomApplication, CustomPermission, OAAPermission, OAAPropertyType
-from pprint import pprint
+from oaaclient.utils import log_arg_error
+from datetime import datetime
 from requests import HTTPError
 from time import time
 from urllib.parse import urlparse
@@ -11,10 +13,15 @@ import boto3
 import botocore
 import csv
 import jwt
+import logging
 import os
 import re
 import requests
 import sys
+
+# logging handler
+logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s', level=logging.INFO)
+log = logging.getLogger(__name__)
 
 
 def gh_api_get(path, auth_token, github_url="https://api.github.com"):
@@ -43,10 +50,14 @@ def gh_api_get(path, auth_token, github_url="https://api.github.com"):
     while True:
         response = requests.get(api_path, headers=headers, timeout=10)
 
-        # if "X-RateLimit-Remaining" in response.headers:
-        #     pass
-        #     limit_remaining = response.headers.get("X-RateLimit-Remaining")
-        #     print(f"Rate limit remaining: {limit_remaining}")
+        if "X-RateLimit-Remaining" in response.headers:
+            limit_remaining = int(response.headers.get("X-RateLimit-Remaining"))
+            if limit_remaining < 150 and limit_remaining % 50 == 0:
+                log.warning(f"GitHub API X-RateLimit-Remaining: {limit_remaining}")
+            if limit_remaining < 1:
+                limit_reset = int(response.headers.get("x-ratelimit-reset"))
+                resets_at = datetime.fromtimestamp(limit_reset).isoformat()
+                raise HTTPError(f"GitHub API Rate limit exceeded, resets at {resets_at}", response=response)
 
         if response.ok:
             if response.links and "next" in response.links:
@@ -131,10 +142,10 @@ def gh_get_org_auth(app_id, org, key_file=None, base64_key=None, github_url="htt
             org_id = i['id']
             break
 
-    # print(f"Debug: Found {org}: {org_id}")
     if not org_id:
         raise Exception(f"Unable to find org {org} in app installations")
 
+    log.debug(f"retrieving GitHub access token for {org}({org_id})")
     auth_response = gh_api_post(f"/app/installations/{org_id}/access_tokens", auth_token=encoded_jwt, data=None, github_url=github_url)
 
     if 'token' in auth_response:
@@ -172,11 +183,13 @@ class OAAGitHub():
 
     def discover_org(self):
         """ Discover all the user and team information for an organization including the default repo permissions """
+        log.info(f"Starting org discovery {self.org_name}")
         org_info = gh_api_get(f"orgs/{self.org_name}", self.access_token, github_url=self.github_url)
         if "default_repository_permission" not in org_info:
             raise Exception("Unable to determine default repository permission, ensure Github App has Organization Administration read-only permission")
 
         # github API returns the literal string "none" when organization has no default permission, convert to None
+        log.info(f"{self.org_name} default org permission {org_info['default_repository_permission']}")
         if org_info['default_repository_permission'] == "read":
             self.org_default_repo_permission = "Pull"
         elif org_info['default_repository_permission'] == "write":
@@ -210,7 +223,7 @@ class OAAGitHub():
         teams = gh_api_get(f"orgs/{self.org_name}/teams", self.access_token, github_url=self.github_url)
         for team in teams:
             team_name = team['name']
-            print(f"Populating team {team_name}")
+            log.debug(f"Org: {self.org_name} - populating team {team_name}")
             self.app.add_local_group(team_name)
             # team member API call uses org id number, easier to just grab the base url from the response
             team_members = gh_api_get(f"{team['url']}/members", self.access_token, github_url=self.github_url)
@@ -240,11 +253,9 @@ class OAAGitHub():
 
         # get the full name of the repository (oprg/repo) to make getting the repo details easier
         full_name = repo['full_name']
-        print(f"Processing {full_name}")
+        log.info(f"Processing repository {full_name}")
 
         # set repository properties
-        if repo['private']:
-            print(" -- Marking repo private")
         self.app.resources[repo['name']].set_property("private", repo['private'])
         # visibility is separate from private, can be `public`, `private` or `internal`
         self.app.resources[repo['name']].set_property("visibility", repo['visibility'])
@@ -258,6 +269,7 @@ class OAAGitHub():
         # Grab team permissions
         teams = gh_api_get(f"/repos/{full_name}/teams", self.access_token, github_url=self.github_url)
         for team in teams:
+            log.debug(f"repo {full_name} adding tean {team['name']}, role {team['permission']}")
             self.app.local_groups[team['name']].add_role(role=team['permission'].capitalize(), resources=[self.app.resources[repo['name']]])
 
         # loop through each collaborator on the reposotory and save their permission level
@@ -272,10 +284,10 @@ class OAAGitHub():
             # for each collaborator add the most privilaged level
             highest_permission = self.__return_highest_permission(c['permissions'])
             if highest_permission:
-                print(f" - {user_login} - {highest_permission}")
+                log.debug(f"repo {full_name} adding {user_login}, role {highest_permission}")
                 self.app.local_users[user_login].add_role(role=highest_permission, resources=[self.app.resources[repo['name']]])
             else:
-                print(f" - {user_login} - unable to determine highest permission from {c['permissions']}")
+                log.error(f"repo {full_name} - {user_login} - unable to determine highest permission from {c['permissions']}")
         #
         # add org admin role to repo
         # self.app.add_access(identity="admin", identity_type=OAAIdentityType.LocalRole, permission="admin", resource=repo['name'])
@@ -363,15 +375,15 @@ def load_user_map(oaa_app, user_map):
     csv format should be two columns "github username,email"
     if user_map path begins with s3:// connect to the S3 bucket and stream the object
     """
-    print(f"Loading User map {user_map}")
+    log.info(f"Loading User map {user_map}")
     user_map_url = urlparse(user_map)
     if user_map_url.scheme == "s3":
         # s3 object
         try:
-            print("Connecting to S3")
+            log.info("Connecting to S3")
             bucket_name = user_map_url.netloc
             object_path = user_map_url.path.lstrip("/")
-            print(f"Loading User map from S3 bucket \"{bucket_name}\", object \"{object_path}\"")
+            log.info(f"Loading User map from S3 bucket \"{bucket_name}\", object \"{object_path}\"")
             s3 = boto3.resource("s3")
             bucket = s3.Bucket(bucket_name)
             obj = bucket.Object(key=object_path)
@@ -381,10 +393,10 @@ def load_user_map(oaa_app, user_map):
                 login = line[0].strip()
                 identity = line[1].strip()
                 if login in oaa_app.app.local_users:
-                    print(f" -- {login} -> {identity}")
+                    log.info(f"setting {login} -> {identity}")
                     oaa_app.app.local_users[login].add_identity(identity)
         except botocore.exceptions.ClientError as e:
-            print(e.response['Error'], file=sys.stderr)
+            log.error(e.response['Error'])
             exit(1)
     else:
         # local file
@@ -394,14 +406,14 @@ def load_user_map(oaa_app, user_map):
                     login = line[0].strip()
                     identity = line[1].strip()
                     if login in oaa_app.app.local_users:
-                        print(f" -- {login} -> {identity}")
+                        log.info(f"setting {login} -> {identity}")
                         oaa_app.app.local_users[login].add_identity(identity)
         except FileNotFoundError:
-            print(f"Unable to locate file {user_map}, exiting", file=sys.stderr)
+            log.error(f"Unable to locate file {user_map}, exiting")
             exit(1)
         except IOError as e:
-            print(f"Error while reading usermap file {user_map}", file=sys.stderr)
-            print(e, file=sys.stderr)
+            log.error(f"Error while reading usermap file {user_map}")
+            log.error(e)
             exit(1)
 
 
@@ -410,14 +422,14 @@ def run(org_name, app_id, veza_url, oaa_user, veza_api_key, key_file=None, base6
     try:
         veza_con = OAAClient(url=veza_url, api_key=veza_api_key)
     except OAAClientError as e:
-        print(f"Unnable to connect to Veza ({veza_url})", file=sys.stderr)
-        print(e.message, file=sys.stderr)
+        log.error(f"Unnable to connect to Veza ({veza_url})")
+        log.error(e.message)
         exit(1)
 
     # use Github App API to retrieve authentication token for organization
     org_token = gh_get_org_auth(app_id, org_name, key_file=key_file, base64_key=base64_key)
     if org_token:
-        print(f"Retrieved token for orgination {org_name}, starting discovery")
+        log.info(f"Retrieved token for orgination {org_name}, starting discovery")
 
     # instantiate an instance of the OAAGitHub class, this class represents an Org and creates an OAA app
     oaa_app = OAAGitHub(org_name, org_token)
@@ -425,9 +437,9 @@ def run(org_name, app_id, veza_url, oaa_user, veza_api_key, key_file=None, base6
     try:
         oaa_app.discover_all_repos()
     except HTTPError as e:
-        print(f"Error discoverying repositories: GitHub API returned error: {e.response.status_code} for {e.request.url}")
-        print(e)
-        print("Exiting")
+        log.error(f"Error discoverying repositories: GitHub API returned error: {e.response.status_code} for {e.request.url}")
+        log.error(e)
+        log.error("Exiting")
         sys.exit(1)
 
     # process user_map file if provided
@@ -436,39 +448,29 @@ def run(org_name, app_id, veza_url, oaa_user, veza_api_key, key_file=None, base6
 
     # Push to Veza
     # Define the provider and create if necessary
+    log.info("Starting push")
     provider_name = "Github"
     provider = veza_con.get_provider(provider_name)
     if provider:
-        print("-- Found existing provider")
+        log.info("Found existing provider")
     else:
-        print(f"++ Creating Provider {provider_name}")
+        log.info(f"Creating Provider {provider_name}")
         provider = veza_con.create_provider(provider_name, "application")
-    print(f"-- Provider: {provider['name']} ({provider['id']})")
+    log.info(f"Provider: {provider['name']} ({provider['id']})")
 
     # push data
     try:
         response = veza_con.push_application(provider_name, data_source_name=f"github-{org_name}", application_object=oaa_app.app, save_json=save_json)
         if response.get("warnings", None):
-            print("-- Push succeeded with warnings:")
+            log.warning("Push succeeded with warnings:")
             for e in response["warnings"]:
-                print(f"  - {e}")
+                log.warning(e)
     except OAAClientError as e:
-        print(f"-- Error: {e.error}: {e.message} ({e.status_code})", file=sys.stderr)
+        log.error(f"{e.error}: {e.message} ({e.status_code})", file=sys.stderr)
         if hasattr(e, "details"):
             for d in e.details:
-                pprint(f"  -- {d}")
-
-
-def log_arg_error(arg=None, env=None):
-    if arg and env:
-        print(f"Unable to load required paramter, must supply {arg} or set OS environment variable {env}", file=sys.stderr)
-    elif arg and not env:
-        print(f"Unable to load required paramter, must supply {arg}", file=sys.stderr)
-    elif env:
-        print(f"Unable to load required paramter, must set OS environment variable {env}", file=sys.stderr)
-    else:
-        raise Exception("Must provide arg or env to include in error message")
-    return
+                log.error(d)
+    log.info("Success")
 
 
 ###########################################################
@@ -498,22 +500,22 @@ def main():
     veza_api_key = os.getenv('VEZA_API_KEY')
 
     if not org_name:
-        log_arg_error("--org", "GITHUB_ORG")
+        log_arg_error(log, "--org", "GITHUB_ORG")
     if not app_id:
-        log_arg_error("--app_id", "GITHUB_APP_ID")
+        log_arg_error(log, "--app_id", "GITHUB_APP_ID")
     if not veza_url:
-        log_arg_error("--veza-url", "VEZA_URL")
+        log_arg_error(log, "--veza-url", "VEZA_URL")
     if not oaa_user:
-        log_arg_error("--oaa-user", "OAA_USER")
+        log_arg_error(log, "--oaa-user", "OAA_USER")
     if not veza_api_key:
-        log_arg_error(env="VEZA_API_KEY")
+        log_arg_error(log, env="VEZA_API_KEY")
 
     if None in [org_name, app_id, veza_url, oaa_user, veza_api_key, save_json]:
-        print("Missing one or more required parameters", file=sys.stderr)
+        log.error("Missing one or more required parameters")
         sys.exit(1)
 
     if not key_file and not base64_key:
-        print("GitHub API not provided via --key-file or one of OS environment GITHUB_KEY or GITHUB_KEY_BASE64")
+        log.error("GitHub API not provided via --key-file or one of OS environment GITHUB_KEY or GITHUB_KEY_BASE64")
         sys.exit(1)
 
     run(org_name, app_id, veza_url, oaa_user, veza_api_key, key_file=key_file, base64_key=base64_key, user_map=user_map, save_json=save_json)

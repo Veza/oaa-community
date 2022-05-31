@@ -75,4 +75,11 @@ def test_idp_payload_push():
     if not response:
         assert False
 
+    # print out any warnigns from the push for debugging puproses, warnings are not a failure, warnings will include
+    # being unable to find fake identities
+    if response.get("warnings", None):
+        print("Push warnings:")
+        for e in response["warnings"]:
+            print(f"  - {e}")
+
     return

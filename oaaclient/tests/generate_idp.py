@@ -44,6 +44,7 @@ def generate_idp():
 
     group001 = idp.add_group("group001", "Group 001", "g001")
     group001.set_property("owner", "somebody")
+    group001.add_assumed_role_arns(["arn:aws:iam::123456789:role/Group001"])
 
     idp.add_group("group002", "Group 002", "g002")
     idp.add_group("group003", "Group 003", "g003")
@@ -229,6 +230,11 @@ GENERATED_IDP_PAYLOAD = """
       "identity": "g001",
       "full_name": "Group 001",
       "is_security_group": null,
+      "assumed_role_arns": [
+        {
+          "identity": "arn:aws:iam::123456789:role/Group001"
+        }
+      ],
       "tags": [],
       "custom_properties": {
         "owner": "somebody"
@@ -239,6 +245,7 @@ GENERATED_IDP_PAYLOAD = """
       "identity": "g002",
       "full_name": "Group 002",
       "is_security_group": null,
+      "assumed_role_arns": [],
       "tags": [],
       "custom_properties": {}
     },
@@ -246,6 +253,7 @@ GENERATED_IDP_PAYLOAD = """
       "name": "group003",
       "identity": "g003",
       "full_name": "Group 003",
+      "assumed_role_arns": [],
       "is_security_group": null,
       "tags": [],
       "custom_properties": {}
@@ -255,6 +263,7 @@ GENERATED_IDP_PAYLOAD = """
       "identity": "g004",
       "full_name": "Group 004",
       "is_security_group": null,
+      "assumed_role_arns": [],
       "tags": [],
       "custom_properties": {}
     }

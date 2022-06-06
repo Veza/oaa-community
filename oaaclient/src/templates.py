@@ -378,6 +378,7 @@ class CustomResource():
             self.resource_key = resource_key
 
         self.sub_resources = {}
+        self.connections = []
         self.property_definitions = property_definitions
         self.properties = {}
         self.tags = []
@@ -390,7 +391,8 @@ class CustomResource():
         repr = {
             "name": self.name,
             "resource_type": self.resource_type,
-            "description": self.description
+            "description": self.description,
+            "connections": self.connections
         }
 
         repr["sub_resources"] = [sub_resource.to_dict() for sub_resource in self.sub_resources.values()]
@@ -419,6 +421,27 @@ class CustomResource():
         self.sub_resources[name] = CustomResource(name, resource_type, description, self.application_name, sub_resource_key, property_definitions=self.property_definitions)
 
         return self.sub_resources[name]
+
+    def add_resource_connection(self, id: str, node_type: str) -> None:
+        """ Add an external connection to the resource. Allows connecting resource to other entities discovered by Veza such as service accounts
+        or AWS IAM roles.
+
+        Args:
+            id (str): Unique identifier for connection entity
+            node_type (str): Veza type for connecting node
+
+        """
+        if not id:
+            raise OAATemplateException("resource connection id cannot be None")
+        if not node_type:
+            raise OAATemplateException("resource connection node_type cannot be None")
+
+        connection = {"id": str(id), "node_type": str(node_type)}
+
+        if connection not in self.connections:
+            self.connections.append(connection)
+
+        return
 
     def add_access(self, identity, identity_type, permission):
         """ No longer supported, access should be added through identity (local_user, local_group, idp) """
@@ -680,7 +703,7 @@ class LocalUser(Identity):
 
 
 class LocalGroup(Identity):
-    """ LocalUser identity, derived from Identity base class. Used to represent groups of local users for application. Can be associated to an IdP user or not.
+    """ LocalGroup identity, derived from Identity base class. Used to represent groups of local users for application.
 
     Args:
         name (string): name of group
@@ -689,7 +712,7 @@ class LocalGroup(Identity):
     Attributes:
         name (string): name of identity
         identities (list): list of strings for IdP identity association
-        groups (list): list of group names as strings to add user too
+        groups (list): list of group names as strings that group is member of for nested groups
         identity_type (OAAIdentityType): Veza Identity Type, local_group
         application_permissions (List(CustomPermission)): List of permissions identity has directly to custom application
         resource_permissions (dict): Dictionary of custom permissions associated with resources and sub-resources. Key is permission, value is list of resource keys
@@ -703,8 +726,20 @@ class LocalGroup(Identity):
     def __init__(self, name, identities=None, property_definitions: ApplicationPropertyDefinitions = None):
         super().__init__(name, identity_type=OAAIdentityType.LocalGroup, property_definitions=property_definitions)
         self.identities = append_helper(None, identities)
-
+        self.groups = []
         self.created_at = None
+
+    def add_group(self, group: str) -> None:
+        """ add user to local group (group must be created separately)
+
+        Args:
+            group (str): name of local group
+        """
+
+        if group == self.name:
+            raise OAATemplateException("Cannot add group to self")
+
+        self.groups = append_helper(self.groups, group)
 
     def add_identity(self, identity: str) -> None:
         """ add an identity to user, identity should be the email address or another valid identifier for an IdP principal (Okta, Azure, ect). Veza will create a connection from the application local user to IdP identity
@@ -719,6 +754,7 @@ class LocalGroup(Identity):
         return {"name": self.name,
                 "identities": self.identities,
                 "created_at": self.created_at,
+                "groups": self.groups,
                 "tags": [tag.__dict__ for tag in self.tags],
                 "custom_properties": self.properties
                 }
@@ -1368,6 +1404,7 @@ class CustomIdPGroup():
 
         self.is_security_group = None
 
+        self.__assumed_roles = {}
         self.__tags = []
         self.__properties = {}
         self.__property_definitions = property_definitions
@@ -1384,11 +1421,29 @@ class CustomIdPGroup():
 
         group['full_name'] = self.full_name
         group['is_security_group'] = self.is_security_group
+        group['assumed_role_arns'] = [r for r in self.__assumed_roles.values()]
 
         group['tags'] = self.__tags
         group['custom_properties'] = self.__properties
 
         return group
+
+    def add_assumed_role_arns(self, arns: list[str]) -> None:
+        """ add AWS Roles to list of roles group members can assume by arn
+
+        Args:
+            arns (list): list of role ARNs as strings that the group members are allowed to assume
+
+        """
+
+        if not isinstance(arns, list):
+            raise OAATemplateException("arns must be of type list")
+
+        for arn in arns:
+            if arn not in self.__assumed_roles:
+                self.__assumed_roles[arn] = {"identity": arn}
+
+        return
 
     def set_property(self, property_name: str, property_value: any) -> None:
         """ set a custom defined property for group. Property names are checked against defined custom properties
@@ -1519,7 +1574,7 @@ class Tag():
 
          Attributes:
             key (string): key for tag, aka name. Must be present and must be letters, numbers or _ (underscore) only.
-            value (string): Optional: value for tag, will appear in Veza as `key:value`. Must be letters, numbers or _ (underscore) only.
+            value (string): Optional: value for tag, will appear in Veza as `key:value`. Must be letters, numbers and the special characters @,._ only.
 
     """
 
@@ -1529,8 +1584,8 @@ class Tag():
 
         if not re.match(r"^[a-zA-Z0-9_]+$", self.key):
             raise OAATemplateException(f"Invalid characters in tag key {self.key}, may only contain letters, numbers and _ (underscore)")
-        if self.value != "" and not re.match(r"^[a-zA-Z0-9_]+$", self.value):
-            raise OAATemplateException(f"Invalid characters in tag value {self.value}, may only contain letters, numbers and _ (underscore)")
+        if self.value != "" and not re.match(r"^[a-zA-Z0-9_,\.@]+$", self.value):
+            raise OAATemplateException(f"Invalid characters in tag value {self.value}, may only contain letters, numbers and the special characters @,._ ")
 
     def __eq__(self, o):
         if self.key == o.key and self.value == o.value:

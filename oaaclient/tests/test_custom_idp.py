@@ -197,6 +197,7 @@ TEST_CUSTOM_IDP_RESULT = """
       "identity": "group001",
       "full_name": null,
       "is_security_group": null,
+      "assumed_role_arns": [],
       "tags": [],
       "custom_properties": {}
     },
@@ -205,6 +206,7 @@ TEST_CUSTOM_IDP_RESULT = """
       "identity": "group002",
       "full_name": null,
       "is_security_group": null,
+      "assumed_role_arns": [],
       "tags": [],
       "custom_properties": {}
     },
@@ -213,6 +215,7 @@ TEST_CUSTOM_IDP_RESULT = """
       "identity": "group003_identity",
       "full_name": null,
       "is_security_group": null,
+      "assumed_role_arns": [],
       "tags": [],
       "custom_properties": {}
     }

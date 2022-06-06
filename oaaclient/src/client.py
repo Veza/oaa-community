@@ -58,7 +58,7 @@ class OAAClient():
         providers = self.get_provider_list()
         provider = None
         for p in providers:
-            if p["name"] == name:
+            if p["name"].lower() == name.lower():
                 provider = p
                 break
 
@@ -79,7 +79,7 @@ class OAAClient():
         data_sources = self.get_data_sources(provider_id)
         data_source = None
         for d in data_sources:
-            if d["name"] == name:
+            if d["name"].lower() == name.lower():
                 data_source = d
                 break
 

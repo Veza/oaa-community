@@ -79,6 +79,11 @@ def generate_app():
     app.local_users["bob"].add_group("group2")
     app.local_users["marry"].add_group("group2")
 
+    group3 = app.add_local_group("group3")
+    group3.add_group("group1")
+    group3.add_group("group2")
+    app.local_users["rob"].add_group("group3")
+
     # roles
     app.property_definitions.define_local_role_property("role_id", OAAPropertyType.NUMBER)
     app.property_definitions.define_local_role_property("custom", OAAPropertyType.BOOLEAN)
@@ -113,6 +118,7 @@ def generate_app():
     thing2.set_property("publish_date", "1959-03-12T00:00:00.000Z")
 
     cog1 = thing2.add_sub_resource("cog1", resource_type="cog")
+    cog1.add_resource_connection("service_account@some-project.iam.gserviceaccount.com", "GoogleCloudServiceAccount")
 
     # authorizations
     app.local_users["bob"].add_role("role1", apply_to_application=True)
@@ -254,7 +260,7 @@ GENERATED_APP_PAYLOAD = """
           "identities": [
             "rob@example.com"
           ],
-          "groups": null,
+          "groups": ["group3"],
           "is_active": true,
           "created_at": "2001-01-01T00:00:00.000Z",
           "last_login_at": "2002-02-01T00:00:00.000Z",
@@ -280,6 +286,7 @@ GENERATED_APP_PAYLOAD = """
           "name": "group1",
           "identities": null,
           "created_at": null,
+          "groups": [],
           "tags": [],
           "custom_properties": {
             "group_id": 1
@@ -289,10 +296,19 @@ GENERATED_APP_PAYLOAD = """
           "name": "group2",
           "identities": null,
           "created_at": null,
+          "groups": [],
           "tags": [],
           "custom_properties": {
             "group_id": 2
           }
+        },
+        {
+          "name": "group3",
+          "identities": null,
+          "created_at": null,
+          "groups": ["group1", "group2"],
+          "tags": [],
+          "custom_properties": {}
         }
       ],
       "local_roles": [
@@ -328,6 +344,7 @@ GENERATED_APP_PAYLOAD = """
           "name": "thing1",
           "resource_type": "thing",
           "description": "thing1",
+          "connections": [],
           "sub_resources": [],
           "custom_properties": {
             "private": false,
@@ -345,11 +362,18 @@ GENERATED_APP_PAYLOAD = """
           "name": "thing2",
           "resource_type": "thing",
           "description": null,
+          "connections": [],
           "sub_resources": [
             {
               "name": "cog1",
               "resource_type": "cog",
               "description": null,
+              "connections": [
+                {
+                  "id": "service_account@some-project.iam.gserviceaccount.com",
+                  "node_type": "GoogleCloudServiceAccount"
+                 }
+              ],
               "sub_resources": [],
               "custom_properties": {},
               "tags": []
@@ -491,6 +515,12 @@ GENERATED_APP_PAYLOAD = """
           ]
         }
       ]
+    },
+    {
+      "identity": "group3",
+      "identity_type": "local_group",
+      "application_permissions": [],
+      "role_assignments": []
     }
   ]
 }

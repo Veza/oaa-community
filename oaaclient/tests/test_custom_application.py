@@ -218,13 +218,11 @@ def test_exceptions():
 
     assert "resources must be of a type CustomResource" in e.value.message
 
+    group01 = custom_app.add_local_group("group01")
     with pytest.raises(OAATemplateException) as e:
-        Tag("key-unsupported:", value="normal")
-    assert "Invalid characters" in e.value.message
+        group01.add_group("group01")
 
-    with pytest.raises(OAATemplateException) as e:
-        Tag("key", value="value:unsupported&")
-    assert "Invalid characters" in e.value.message
+    assert e.value.message == "Cannot add group to self"
 
 
 def test_generate_app():
@@ -399,6 +397,7 @@ CUSTOM_PROPERTIES_PAYLOAD = """
           "name": "admins",
           "identities": null,
           "created_at": null,
+          "groups": [],
           "tags": [],
           "custom_properties": {
             "group_email": "admins@example.com"
@@ -425,11 +424,13 @@ CUSTOM_PROPERTIES_PAYLOAD = """
           "name": "thing1",
           "resource_type": "thing",
           "description": "test description",
+          "connections": [],
           "sub_resources": [
             {
               "name": "sub_thing",
               "resource_type": "thing",
               "description": null,
+              "connections": [],
               "sub_resources": [],
               "custom_properties": {
                 "owner": "bob"
@@ -446,6 +447,7 @@ CUSTOM_PROPERTIES_PAYLOAD = """
           "name": "cog1",
           "resource_type": "cog",
           "description": null,
+          "connections": [],
           "sub_resources": [],
           "custom_properties": {},
           "tags": []

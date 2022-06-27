@@ -675,6 +675,26 @@ class LocalUser(Identity):
         """
         self.identities = append_helper(self.identities, identity)
 
+    def add_identities(self, identities: list[str]) -> None:
+        """add multiple identities to a local user from a list
+
+        Args:
+            identities (list[str]): list of identities to add to user
+        """
+        if not isinstance(identities, list):
+            raise OAATemplateException("identities must be of type list")
+
+        if self.identities is None:
+            self.identities = []
+
+        for identity in identities:
+            try:
+                self.identities.append(str(identity))
+            except ValueError as e:
+                raise OAATemplateException(f"identity could not be converted to string {identity}")
+
+        return
+
     def add_group(self, group: str) -> None:
         """ add user to local group (group must be created separately)
 

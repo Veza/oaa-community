@@ -35,7 +35,7 @@ Github                        | Generic Application
 organization                  | Application
 members                       | Local User
 team                          | Local Group
-organization admin            | Local Role
+organization owners           | Local Role
 default repository permission | Local Role
 repository                    | Application Resource
 
@@ -44,18 +44,25 @@ The following properties are set based on the GitHub properties
 
 Entity     | Property                   | Description
 -----------|----------------------------|-----------------------------------------------------------------------------------------------
-User       | `outside_collaborator`     | Boolean for users who are not a member of the org that are invited to one or more repositories
+User       | `OutsideCollaborator`     | Boolean for users who are not a member of the org that are invited to one or more repositories
+User       | `profile_name`             | The name the user has set in their profile
+User       | `emails`                   | List of emails discovered for the user
 Repository | `private`                  | Boolean `true` if repository is not public
 Repository | `visibility`               | Repo visibility, may be `public`, `private` or `internal`
 Repository | `default_branch`           | Default branch for repository, branch name tested `default_branch_protected`
 Repository | `default_branch_protected` | Boolean `true` if any protections enabled on default branch
 Repository | `allow_forking`            | Boolean if private forks are allowed
+Repository | `is_fork`                  | Boolean if repository is fork of another
 
 ### Limitations
 
-GitHub limits access to member emails by design and does not provide user emails via the API.
-Veza can associate GitHub users with IdP users (Okta, AzureAD and OneLogin) if a matching email address
-can be provided for the GitHub user name. This connector can take a csv of GitHub user names and email identities
+#### User Identity Mapping
+The GitHub OAA Connector will attempt to retrieve emails for each user to use as an identity in linking the GitHub user
+account with IdP users (Okta, AzureAD and OneLogin). However, GitHub limits exposure of user emails to only email
+addresses that match the verified domain(s) for the organization. If the user does not have an email configured that
+matches a verified domain the OAA Connector will not be able to retrieve an email for the user.
+
+To resolve additional identiy associates the connector can take a csv of GitHub user names and email identities
 to add to the data pulled from the GitHub API. To provide mapping file use the `--user-map <file_path>`
 option at run time with a path to a local file or S3 object. For S3 objects use the URI path, e.g.
 `s3://mybucket/object/key.txt`.
@@ -138,3 +145,10 @@ A `Dockerfile` to build a container is included in the repository..
   -e VEZA_API_KEY=<Veza API Key> \
   oaa_github
   ```
+
+## Additional Properties
+
+- The OAA connector for GitHub reads the list of teams configured in the organization. If a repository returns a team
+  that is not part of the organization in the list of teams that have access to the repository this will result in the
+  connector stopping discovery with an error. The error can be ignored by setting the environment variable
+  `GITHUB_IGNORE_UNKNOWN_TEAMS` to any value.

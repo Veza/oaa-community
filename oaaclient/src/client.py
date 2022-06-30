@@ -239,7 +239,7 @@ def main():
         raise Exception(f"Missing value in app template: {e}")
 
     try:
-        con = OAAClient(host, user, token=token)
+        con = OAAClient(host, api_key=token)
         provider = con.get_provider(provider_name)
         if provider:
             print("-- Found existing provider")
@@ -252,7 +252,11 @@ def main():
 
         print("-- Pushing metadata")
         metadata = load_json_from_file(args.metadata)
-        con.push_metadata(provider_name, data_source_name, metadata)
+        response = con.push_metadata(provider_name, data_source_name, metadata)
+        if response.get("warnings", None):
+            print("-- Push succeeded with warnings:")
+            for e in response["warnings"]:
+                print(f"  - {e}")
     except OAAClientError as e:
         print(f"-- Error: {e.error}: {e.message} ({e.status_code})", file=sys.stderr)
         if hasattr(e, "details"):

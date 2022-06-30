@@ -1,9 +1,8 @@
 #!env python3
 from datetime import datetime
 from oaaclient.client import OAAClient, OAAClientError
-from oaaclient.templates import CustomApplication, CustomPermission, OAAPermission, OAAPropertyType
+from oaaclient.templates import CustomApplication, CustomPermission, OAAPermission, OAAPropertyType, CustomResource
 from oaaclient.utils import log_arg_error
-from datetime import datetime
 from requests import HTTPError
 from time import time
 from urllib.parse import urlparse
@@ -12,6 +11,7 @@ import base64
 import boto3
 import botocore
 import csv
+import json
 import jwt
 import logging
 import os
@@ -22,6 +22,22 @@ import sys
 # logging handler
 logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s', level=logging.INFO)
 log = logging.getLogger(__name__)
+
+class GitHubGraphError(Exception):
+    """Raise when GraphAPI returns errors
+
+    GraphAPI can return HTTP 200 OK with errors in the message, exception wraps returned errors and saves query for debug
+
+    Args:
+        errors (list): list of errors from the API response
+        query (dict): Query submitted that resulted in error
+        message (str, optional): Message string for base exception, defaults to "Error encountered during Graph API call"
+    """
+    def __init__(self, errors: list, query: str, message: str = "Error encountered during Graph API call"):
+        self.message = message
+        self.errors = errors
+        self.query = query
+        super().__init__(self.message)
 
 
 def gh_api_get(path, auth_token, github_url="https://api.github.com"):
@@ -154,10 +170,47 @@ def gh_get_org_auth(app_id, org, key_file=None, base64_key=None, github_url="htt
         raise HTTPError(auth_response.text, response=auth_response)
 
 
+def gh_graph_run(query: str, auth_token: str, variables: dict = None, graph_url: str = "https://api.github.com/graphql") -> dict:
+    """ Run a query against the GitHub GraphQL API
+
+    Args:
+        query (str): String of GraphQL query to run
+        auth_token (str): GitHub bearer auth token
+        variabls (dict, optional): Variables for submission with query
+        graph_url (str, optional): GraphQL API endpoint. Defaults to "https://api.github.com/graphql".
+
+    Raises:
+        HTTPError: For non 200 response from API
+
+    Returns:
+        dict: GraphQL query response
+    """
+
+    headers = {}
+    headers['authorization'] = f"Bearer {auth_token}"
+
+    query_data = {"query": query}
+    if variables:
+        query_data['variables'] = variables
+
+    response = requests.post(graph_url, headers=headers, json=query_data, timeout=60)
+    if response.ok:
+        response_json = response.json()
+        if "errors" in response_json:
+            # GraphAPI can return errors in a success, raise an exception with the error details
+
+            # collapse the query into a single line for better logging
+            query_data["query"] = re.sub('\s+', ' ', query_data["query"])
+            raise GitHubGraphError(errors=response_json["errors"], query=query_data)
+        return response.json()
+    else:
+        raise HTTPError(response.text, response=response)
+
+
 class OAAGitHub():
     ORG_MEMBERS_GROUP_NAME = "Org Members"
     ORG_MEMBERS_ROLE_NAME = "Org Member"
-    ORG_ADMINS_ROLE_NAME = "Org Admin"
+    ORG_OWNERS_ROLE_NAME = "Org Owner"
 
     def __init__(self, org_name, access_token, github_url="https://api.github.com"):
         self.app = CustomApplication(f"Github - {org_name}", "Github")
@@ -171,67 +224,221 @@ class OAAGitHub():
 
         # configure custom properties
         self.app.property_definitions.define_local_user_property("OutsideCollaborator", OAAPropertyType.BOOLEAN)
+        self.app.property_definitions.define_local_user_property("emails", OAAPropertyType.STRING_LIST)
+        self.app.property_definitions.define_local_user_property("profile_name", OAAPropertyType.STRING)
 
         self.app.property_definitions.define_resource_property("repository", "Private", OAAPropertyType.BOOLEAN)
         self.app.property_definitions.define_resource_property("repository", "allow_forking", OAAPropertyType.BOOLEAN)
         self.app.property_definitions.define_resource_property("repository", "visibility", OAAPropertyType.STRING)
         self.app.property_definitions.define_resource_property("repository", "default_branch", OAAPropertyType.STRING)
         self.app.property_definitions.define_resource_property("repository", "default_branch_protected", OAAPropertyType.BOOLEAN)
+        self.app.property_definitions.define_resource_property("repository", "is_fork", OAAPropertyType.BOOLEAN)
 
-        # run discovery
-        self.discover_org()
 
     def discover_org(self):
         """ Discover all the user and team information for an organization including the default repo permissions """
         log.info(f"Starting org discovery {self.org_name}")
         org_info = gh_api_get(f"orgs/{self.org_name}", self.access_token, github_url=self.github_url)
-        if "default_repository_permission" not in org_info:
-            raise Exception("Unable to determine default repository permission, ensure Github App has Organization Administration read-only permission")
+
+        if not org_info.get("default_repository_permission"):
+            # default_repository_permission should be included in all responses but will be `null` if the calling user does not have sufficient permissions
+            raise Exception(f"{self.org_name} - Unable to determine default repository permission, ensure Github App has Organization Administration read-only permission")
 
         # github API returns the literal string "none" when organization has no default permission, convert to None
         log.info(f"{self.org_name} default org permission {org_info['default_repository_permission']}")
-        if org_info['default_repository_permission'] == "read":
-            self.org_default_repo_permission = "Pull"
-        elif org_info['default_repository_permission'] == "write":
-            self.org_default_repo_permission = "Push"
-        elif org_info['default_repository_permission'] == "none":
+        if org_info['default_repository_permission'] == "none":
             self.org_default_repo_permission = None
         else:
             self.org_default_repo_permission = org_info['default_repository_permission']
 
-        # build list of org members
         self.app.add_local_group(self.ORG_MEMBERS_GROUP_NAME)
-        members = gh_api_get(f"orgs/{self.org_name}/members?role=member", self.access_token, github_url=self.github_url)
-        for member in members:
-            login = member['login']
-            if login not in self.app.local_users:
-                self.app.add_local_user(login)
-            self.app.local_users[login].set_property("OutsideCollaborator", False)
-            self.app.local_users[login].add_group(self.ORG_MEMBERS_GROUP_NAME)
-            self.app.local_users[login].add_role(self.ORG_MEMBERS_ROLE_NAME, apply_to_application=True)
 
-        # build list of organization admins
-        org_admins = gh_api_get(f"orgs/{self.org_name}/members?role=admin", self.access_token, github_url=self.github_url)
-        for admin in org_admins:
-            login = admin['login']
-            if login not in self.app.local_users:
-                self.app.add_local_user(login)
-            self.app.local_users[login].set_property("OutsideCollaborator", False)
-            self.app.local_users[login].add_role(self.ORG_ADMINS_ROLE_NAME, apply_to_application=True)
+        self.discover_org_members()
+        self.discover_org_teams()
 
-        # build up teams
-        teams = gh_api_get(f"orgs/{self.org_name}/teams", self.access_token, github_url=self.github_url)
-        for team in teams:
-            team_name = team['name']
-            log.debug(f"Org: {self.org_name} - populating team {team_name}")
-            self.app.add_local_group(team_name)
-            # team member API call uses org id number, easier to just grab the base url from the response
-            team_members = gh_api_get(f"{team['url']}/members", self.access_token, github_url=self.github_url)
-            for member in team_members:
-                user_login = member['login']
-                if user_login not in self.app.local_users:
-                    self.app.add_local_user(user_login)
-                self.app.local_users[user_login].add_group(team_name)
+        return
+
+    def discover_org_members(self):
+        """ Discovery the list of organization members and their organization role. Uses the GitHub GraphQL API """
+        log.debug(f"Discovering org users and roles for {self.org_name}")
+        query = """query($org_name:String!, $first:Int!, $after:String){
+                    organization(login: $org_name) {
+                        membersWithRole(first: $first,  after: $after) {
+                            pageInfo {
+                                endCursor
+                                hasNextPage
+                            }
+                            totalCount
+                            edges {
+                                role
+                                hasTwoFactorEnabled
+                                node {
+                                    createdAt
+                                    email
+                                    id
+                                    login
+                                    name
+                                    updatedAt
+                                    organizationVerifiedDomainEmails(login: $org_name)
+                                }
+                            }
+                        }
+                    }
+                }
+        """
+        variables = {"org_name": self.org_name, "first": 100, "after": None}
+
+        total_users = 0
+        users_with_identity = 0
+        while True:
+            result = gh_graph_run(query,auth_token=self.access_token, variables=variables)
+            for e in result["data"]["organization"]["membersWithRole"]["edges"]:
+                total_users += 1
+                login = e["node"]["login"]
+                user = self.app.add_local_user(login)
+                user.set_property("OutsideCollaborator", False)
+                user.set_property("profile_name", e["node"]["name"])
+                user.created_at = e["node"]["createdAt"]
+
+                if e["node"]["organizationVerifiedDomainEmails"]:
+                    users_with_identity += 1
+                    user.add_identities(e["node"]["organizationVerifiedDomainEmails"])
+                    user.set_property("Emails", e["node"]["organizationVerifiedDomainEmails"])
+
+                if e["role"] == "MEMBER":
+                    user.add_group(self.ORG_MEMBERS_GROUP_NAME)
+                    user.add_role(self.ORG_MEMBERS_ROLE_NAME, apply_to_application=True)
+                elif e["role"] == "ADMIN":
+                    user.add_role(self.ORG_OWNERS_ROLE_NAME, apply_to_application=True)
+                else:
+                    log.warning(f"Unknown user organization role: {e['role']}")
+
+            #pagination
+            if result["data"]["organization"]["membersWithRole"]["pageInfo"]["hasNextPage"]:
+                variables["after"] = result["data"]["organization"]["membersWithRole"]["pageInfo"]["endCursor"]
+            else:
+                break
+
+        log.info(f"Discovered {total_users} users for organization {self.org_name}")
+        log.debug(f"Identities found for {users_with_identity} of {total_users} users in org {self.org_name}")
+        return
+
+    def discover_org_teams(self):
+        """Discovery the Organization teams and populate members"""
+
+        log.debug(f"Discovering org teams and team members for {self.org_name}")
+
+        # first discover list of teams, doing a combined teams, since number of teams and members/team is unpredictable its
+        # easier to do this than paginate on multiple axises
+        query = """
+                query ($org_name: String!, $first: Int, $after: String) {
+                  organization(login: $org_name) {
+                    teams(first: $first, after: $after) {
+                      edges {
+                        node {
+                          name
+                          id
+                          slug
+                        }
+                      }
+                      pageInfo {
+                        endCursor
+                        hasNextPage
+                      }
+                    }
+                  }
+                }
+                """
+
+        variables = {"org_name": self.org_name, "first": 100, "after": None}
+        team_list = []
+        while True:
+            result = gh_graph_run(query,auth_token=self.access_token, variables=variables)
+            for edge in result["data"]["organization"]["teams"]["edges"]:
+                node = edge['node']
+                team_list.append(node)
+                team_name = node['name']
+                self.app.add_local_group(team_name)
+
+            if result["data"]["organization"]["teams"]["pageInfo"]["hasNextPage"]:
+                variables["after"] = result["data"]["organization"]["teams"]["pageInfo"]["endCursor"]
+            else:
+                break
+
+        # now for each team query the team members and child-teams
+
+        query = """
+                query ($org_name: String!, $team_slug: String!, $first: Int, $members_after: String, $children_after: String) {
+                  organization(login: $org_name) {
+                    teams(first: 1, query: $team_slug) {
+                      edges {
+                        node {
+                          name
+                          members(membership: IMMEDIATE, first: $first, after: $members_after) {
+                            nodes {
+                              id
+                              name
+                              login
+                            }
+                            pageInfo {
+                              endCursor
+                              hasNextPage
+                            }
+                          }
+                          childTeams(immediateOnly: true, first: $first, after: $children_after) {
+                            nodes {
+                              name
+                              slug
+                              id
+                            }
+                            pageInfo {
+                              endCursor
+                              hasNextPage
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+                """
+        variables = {"org_name": self.org_name, "first": 100, "members_after": None, "children_after": None}
+
+        for team in team_list:
+            variables["team_slug"] = team["slug"]
+            log.debug(f"Discovering team memberships and child teams for {team['slug']} in {self.org_name}")
+            while True:
+                result = gh_graph_run(query,auth_token=self.access_token, variables=variables)
+                if not result["data"]["organization"]["teams"]["edges"]:
+                    # no members for team, continue
+                    continue
+                elif len(result["data"]["organization"]["teams"]["edges"]) != 1:
+                    # this should never happen but we got more than one team result matching by slug
+                    raise Exception(f"GitHub query for team membership returned more than one team. team: {team['slug']}, org {self.org_name}")
+
+                node = result["data"]["organization"]["teams"]["edges"][0]["node"]
+                if node["name"] != team["name"]:
+                    raise Exception(f"Recieved result for team membership data for wrong team, expected {team['name']}, recieved {node['name']}, org {self.org_name}")
+
+                # assign child team groups to current team
+                for child_team in node["childTeams"]["nodes"]:
+                    # add the child team group as a member of the parent
+                    self.app.local_groups[child_team["name"]].add_group(team["name"])
+                variables["children_after"] = node["childTeams"]["pageInfo"]["endCursor"]
+
+                # assign all members that are directly in the group
+                for member in node["members"]["nodes"]:
+                    member_login = member["login"]
+                    log.debug(f"Adding user to team: login: {member_login}, team: {team['name']}")
+                    self.app.local_users[member_login].add_group(team["name"])
+                variables["members_after"] = node["members"]["pageInfo"]["endCursor"]
+
+                if node["members"]["pageInfo"]["hasNextPage"] or node["childTeams"]["pageInfo"]["hasNextPage"]:
+                    continue
+                else:
+                    break
+
+        return
 
     def discover_all_repos(self):
         """ get all the repositories for this org and call discover_repo for each """
@@ -243,34 +450,77 @@ class OAAGitHub():
         """ populate the OAA app with the access details for a given repo, takes in GitHub repo information dictionary"""
 
         # add the repository to the OAA model, will create a CustomResource for each repo
-        self.app.add_resource(name=repo['name'], resource_type="repository")
+        repo_resource = self.app.add_resource(name=repo['name'], resource_type="repository")
 
         if repo['description'] and len(repo['description']) > 256:
             # OAA description max length is 256, GitHub's description could be longer, truncate
-            self.app.resources[repo['name']].description = repo['description'][:255]
+            repo_resource.description = repo['description'][:255]
         else:
-            self.app.resources[repo['name']].description = repo['description']
+            repo_resource.description = repo['description']
 
         # get the full name of the repository (oprg/repo) to make getting the repo details easier
         full_name = repo['full_name']
         log.info(f"Processing repository {full_name}")
 
         # set repository properties
-        self.app.resources[repo['name']].set_property("private", repo['private'])
+        repo_resource.set_property("private", repo['private'])
         # visibility is separate from private, can be `public`, `private` or `internal`
-        self.app.resources[repo['name']].set_property("visibility", repo['visibility'])
-        self.app.resources[repo['name']].set_property("allow_forking", repo['allow_forking'])
+        repo_resource.set_property("visibility", repo['visibility'])
+        if "allow_forking" in repo:
+            # allow_forking property might not be in all responses
+            repo_resource.set_property("allow_forking", repo['allow_forking'])
+        repo_resource.set_property("is_fork", repo['fork'])
+
 
         # test default branch for branch protections and set boolean result
-        self.app.resources[repo['name']].set_property("default_branch", repo['default_branch'])
+        repo_resource.set_property("default_branch", repo['default_branch'])
         default_branch_protected = self.__is_branch_protected(full_name, repo['default_branch'])
-        self.app.resources[repo['name']].set_property("default_branch_protected", default_branch_protected)
+        repo_resource.set_property("default_branch_protected", default_branch_protected)
+
+        self.__get_repo_teams(full_name, repo_resource)
+        self.__get_repo_collaborators(full_name, repo_resource)
+
+        # add default role with org default permission
+        if self.org_default_repo_permission is not None:
+            self.app.local_groups[self.ORG_MEMBERS_GROUP_NAME].add_role(role=self.org_default_repo_permission, resources=[repo_resource])
+
+        return
+
+    def __get_repo_teams(self, full_name: str, repo_resource: CustomResource) -> None:
+        """ Get teams assigned to a repository and add the team's role to the local_group
+
+        Args:
+            full_name (str): full name of the repo, e.g. org/repository
+            repo_resource (CustomResource): OAA resource object for repository
+        """
 
         # Grab team permissions
         teams = gh_api_get(f"/repos/{full_name}/teams", self.access_token, github_url=self.github_url)
         for team in teams:
-            log.debug(f"repo {full_name} adding tean {team['name']}, role {team['permission']}")
-            self.app.local_groups[team['name']].add_role(role=team['permission'].capitalize(), resources=[self.app.resources[repo['name']]])
+            team_name = team['name']
+            if team_name not in self.app.local_groups:
+                # if team included in API response list that is not included in the Organization's teams stop extraction unless set otherwise
+                if os.getenv("GITHUB_IGNORE_UNKNOWN_TEAMS") is not None:
+                    log.warning(f"repo {full_name} unknown team assigned to repository, ignoring: {team_name} role {team_role}")
+                    continue
+                else:
+                    log.error("Raising exception for unknown team assigned to repository, set GITHUB_IGNORE_UNKNOWN_TEAMS environment variable to disable exception")
+                    raise Exception(f"repo {full_name} unknown team assigned to repository: {team_name} role {team_role}")
+
+            team_role = self.__map_permission(team['permission'])
+            log.debug(f"repo {full_name} adding tean {team_name}, role {team_role}")
+
+            self.app.local_groups[team_name].add_role(role=team_role, resources=[repo_resource])
+
+        return
+
+    def __get_repo_collaborators(self, full_name: str, repo_resource: CustomResource) -> None:
+        """ Get all repository collaborators (user's assigned directly to the repository) and assign the users the correct role on the repository resource
+
+        Args:
+            full_name (str): full name of the repo, e.g. org/repository
+            repo_resource (CustomResource): OAA resource object for repository
+        """
 
         # loop through each collaborator on the reposotory and save their permission level
         # ?affiliation=direct will show users with direct permissions on repo vs inherited from team or default
@@ -282,32 +532,44 @@ class OAAGitHub():
                 self.app.add_local_user(user_login)
                 self.app.local_users[user_login].set_property("OutsideCollaborator", True)
             # for each collaborator add the most privilaged level
-            highest_permission = self.__return_highest_permission(c['permissions'])
-            if highest_permission:
-                log.debug(f"repo {full_name} adding {user_login}, role {highest_permission}")
-                self.app.local_users[user_login].add_role(role=highest_permission, resources=[self.app.resources[repo['name']]])
+            user_role = self.__determine_user_role(c['permissions'])
+            if user_role:
+                log.debug(f"repo {full_name} adding {user_login}, role {user_role}")
+                self.app.local_users[user_login].add_role(role=user_role, resources=[repo_resource])
             else:
                 log.error(f"repo {full_name} - {user_login} - unable to determine highest permission from {c['permissions']}")
-        #
-        # add org admin role to repo
-        # self.app.add_access(identity="admin", identity_type=OAAIdentityType.LocalRole, permission="admin", resource=repo['name'])
 
-        # add default role with org default permission
-        if self.org_default_repo_permission is not None:
-            self.app.local_groups[self.ORG_MEMBERS_GROUP_NAME].add_role(role=self.org_default_repo_permission, resources=[self.app.resources[repo['name']]])
+        return
 
-    def __return_highest_permission(self, permission_list):
+    def __determine_user_role(self, permission_list):
         """ returns the highest permission that is True from the list of Github repo permissions
         the Github API returns True for all levels below the assigned level, to simplify reporting
         only save the highest level """
 
         ordered_permissions = ["admin", "maintain", "push", "triage", "pull"]
-        for level in ordered_permissions:
-            if permission_list.get(level, False):
-                return level.capitalize()
+        for permission in ordered_permissions:
+            if permission_list.get(permission, False):
+                return self.__map_permission(permission)
 
-        # none of them where true, not sure how this would happen
         return None
+
+    def __map_permission(self, permission: str) -> str:
+        """Converts API notation for roles to user facing role names
+
+        Args:
+            permission (str): permission as returned from the API
+
+        Returns:
+            str: name of user facing role
+        """
+
+        # compare by lowercase to reduce chance of issues
+        if permission.lower() == "pull":
+            return "read"
+        elif permission.lower() == "push":
+            return "write"
+        else:
+            return permission
 
     def __is_branch_protected(self, repo_path, branch_name):
         """ pull branch protection information and return true if any branch protections are enabled """
@@ -358,12 +620,12 @@ class OAAGitHub():
     def __define_github_roles(self):
         # Org Roles
         self.app.add_local_role(self.ORG_MEMBERS_ROLE_NAME, ["View"])
-        self.app.add_local_role(self.ORG_ADMINS_ROLE_NAME, ["Admin"])
+        self.app.add_local_role(self.ORG_OWNERS_ROLE_NAME, ["Admin"])
 
         # Repo Roles
-        self.app.add_local_role("Pull", ["Pull", "Fork"])
+        self.app.add_local_role("Read", ["Pull", "Fork"])
         self.app.add_local_role("Triage", ["Pull", "Fork"])
-        self.app.add_local_role("Push", ["Pull", "Fork", "Push", "Merge"])
+        self.app.add_local_role("Write", ["Pull", "Fork", "Push", "Merge"])
         self.app.add_local_role("Maintain", ["Pull", "Fork", "Push", "Merge"])
         self.app.add_local_role("Admin", ["Pull", "Fork", "Push", "Merge", "Manage Access"])
 
@@ -418,6 +680,10 @@ def load_user_map(oaa_app, user_map):
 
 
 def run(org_name, app_id, veza_url, oaa_user, veza_api_key, key_file=None, base64_key=None, user_map=None, save_json=False):
+
+    if os.getenv("OAA_DEBUG"):
+        log.setLevel(logging.DEBUG)
+
     # Instantiate a OAA Client, do this early to validate connection before processing application
     try:
         veza_con = OAAClient(url=veza_url, api_key=veza_api_key)
@@ -433,6 +699,22 @@ def run(org_name, app_id, veza_url, oaa_user, veza_api_key, key_file=None, base6
 
     # instantiate an instance of the OAAGitHub class, this class represents an Org and creates an OAA app
     oaa_app = OAAGitHub(org_name, org_token)
+
+    try:
+        oaa_app.discover_org()
+    except HTTPError as e:
+        log.error(f"Error discoverying organization: GitHub API returned error: {e.response.status_code} for {e.request.url}")
+        log.error(e)
+        log.error("Exiting")
+        sys.exit(1)
+    except GitHubGraphError as e:
+        log.error(f"GitHub GraphAPI error discovering organization {org_name}")
+        for error in e.errors:
+            log.error(error)
+        log.debug(f"Errored query: {e.query}")
+        log.error("Exiting")
+        sys.exit(1)
+
     # populate all repositories
     try:
         oaa_app.discover_all_repos()
@@ -466,10 +748,11 @@ def run(org_name, app_id, veza_url, oaa_user, veza_api_key, key_file=None, base6
             for e in response["warnings"]:
                 log.warning(e)
     except OAAClientError as e:
-        log.error(f"{e.error}: {e.message} ({e.status_code})", file=sys.stderr)
+        log.error(f"{e.error}: {e.message} ({e.status_code})")
         if hasattr(e, "details"):
             for d in e.details:
                 log.error(d)
+        sys.exit(1)
     log.info("Success")
 
 

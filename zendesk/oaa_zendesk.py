@@ -144,8 +144,8 @@ class OAAZendesk():
 
         # define OAA custom properties for users
         self.app.property_definitions.define_local_user_property("id", OAAPropertyType.STRING)
-        self.app.property_definitions.define_local_role_property("display_name", OAAPropertyType.STRING)
-        self.app.property_definitions.define_local_role_property("role", OAAPropertyType.STRING)
+        self.app.property_definitions.define_local_user_property("display_name", OAAPropertyType.STRING)
+        self.app.property_definitions.define_local_user_property("role", OAAPropertyType.STRING)
 
 
         # get only admin and agents, skip over end-users

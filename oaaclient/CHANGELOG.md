@@ -1,9 +1,16 @@
 # OAA Client Change Log
 
+## 2022/07/01
+* Added support for setting OAA Provider Icons via `Client.update_provider_icon` function.
+* Added `utils.encode_icon_file()` function to assist with base64 encoding icon files
+
+## 2022/06/23
+* Added `client.delete_provider()` and `client.delete_data_source()` functions
+
 ## 2022/05/25
 * Added support to CustomApplication template for nested groups, local groups can be added to another local group with `.add_group(group: str)` operation
 * Added support to CustomIdP for groups to have a list of AWS roles that members can assume. Role can be added to a group with `.add_assumed_role_arns([arns])`
-* Added support to CustomApplication resources and sub-resources for connections to outside entities in the graph. 
+* Added support to CustomApplication resources and sub-resources for connections to outside entities in the graph.
 * Extended supported characters for Tag values to include letters, numbers and specials characters `.,_@`
 * Updated client `get_provier()` and `get_data_source()` operations to perform case insensitive search of existing entities
 

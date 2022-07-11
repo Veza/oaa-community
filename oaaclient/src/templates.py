@@ -1,6 +1,6 @@
 from __future__ import annotations
-from typing import Optional
 from enum import Enum
+from typing import Optional
 import json
 import re
 

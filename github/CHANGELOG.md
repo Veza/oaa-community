@@ -1,5 +1,8 @@
 # GitHub Connector Change Log
 
+## 2022/7/1
+* Set GitHub provider icon to GitHub mark logo
+
 ## 2022/6/23
 * Retrieve emails for users that match organization verified domains using GitHub GraphAPI
 * Retreived emails are added as identities for users to enable matching to IdP if configured

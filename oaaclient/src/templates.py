@@ -70,9 +70,9 @@ class CustomApplication(Application):
         description (string): Description for application
         identity_to_permissions (dict): Mapping of authorizations for identities to resources
         idp_identities (dict): Dictionary of IdPIdentity class instances keyed by name
-        local_groups (dict): Dictionary of LocalGroup class instances keyed by name
-        local_roles (dict): Dictionary of LocalRole class instances keyed by name
-        local_users (dict): Dictionary of LocalUser class instances keyed by name
+        local_groups (dict): Dictionary of LocalGroup class instances keyed by identifier
+        local_roles (dict): Dictionary of LocalRole class instances keyed by identifier
+        local_users (dict): Dictionary of LocalUser class instances keyed by identifier
         name (string): Name of custom application
         properties (dict): key value pairs of property values, property keys must be defined as part of the property_definitions
         property_definitions (dict): dictionary of the custom property names and types for the application
@@ -195,59 +195,97 @@ class CustomApplication(Application):
 
         return self.resources[name]
 
-    def add_local_user(self, name: str, identities: list[str] = None, groups: list[str] = None) -> LocalUser:
-        """ Create a new local user for application. Local users can be assigned to groups and associated with resources via permissions or roles.
+    def add_local_user(self, name: str, identities: list[str] = None, groups: list[str] = None, unique_id: str = None) -> LocalUser:
+        """ Create a new local user for application.
+
+        Local users can be assigned to groups and associated with resources via permissions or roles.
         Groups and identities can be provided at creation or added later. See `Identity` and `LocalUser` class for operations.
+
+        Local users will be identified by `name` by default, if `unique_id` is provided it will be used as the identifier instead.
+
+        Local users can be referenced after creation if needed through `self.local_users[identifier]`
+
+        Use `unique_id` when name is not gaurenteed to be unique. All permission, group and role assignments will be referenced by unique_id.
+
 
         Args:
             name (str): Display name for user
             identities (list): List of identities as strings (usually email) for local user. Used to map local user to discovered IdP identities.
             groups (list): List of group names (as string) to add user to
+            unique_id (str, optional): Unique identifier for user for reference by ID
 
         Returns:
             LocalUser
 
         """
-        if name in self.local_users:
-            raise OAATemplateException(f"Local user {name} already defined")
-        self.local_users[name] = LocalUser(name, identities, groups, property_definitions=self.property_definitions)
+        if unique_id:
+            identifier = unique_id
+        else:
+            identifier = name
+        if identifier in self.local_users:
+            raise OAATemplateException(f"Local user identified by {identifier} already defined")
 
-        return self.local_users[name]
+        self.local_users[identifier] = LocalUser(name, identities, groups, unique_id=unique_id, property_definitions=self.property_definitions)
 
-    def add_local_group(self, name: str, identities: list[str] = None) -> LocalGroup:
-        """ Create a new local group. Groups can be associated to resources via permissions or roles. All users in the local group are granted the group's authorization.
+        return self.local_users[identifier]
+
+    def add_local_group(self, name: str, identities: list[str] = None, unique_id: str = None) -> LocalGroup:
+        """ Create a new local group.
+
+        Groups can be associated to resources via permissions or roles. All users in the local group are granted the group's authorization.
+
+        Local groups will be identified by `name` by default, if `unique_id` is provided it will be used as the identifier instead
+
+        Local groups can be referenced after creatino if needed through `self.local_groups[identifier]`
 
         Args:
             name (str): Display name for group
             identities (list): List of IdP identities to associate group with.
+            unique_id (str, optional): Unique identifier for group for reference by ID
 
         Returns:
             LocalGroup
         """
+        if unique_id:
+            identifier = unique_id
+        else:
+            identifier = name
 
-        if name in self.local_groups:
-            raise OAATemplateException(f"Local group {name} already defined")
-        self.local_groups[name] = LocalGroup(name, identities, property_definitions=self.property_definitions)
+        if identifier in self.local_groups:
+            raise OAATemplateException(f"Local group identified by {identifier} already defined")
+        self.local_groups[identifier] = LocalGroup(name, identities, unique_id=unique_id, property_definitions=self.property_definitions)
 
-        return self.local_groups[name]
+        return self.local_groups[identifier]
 
-    def add_local_role(self, name: str, permissions: list[str] = None) -> LocalRole:
-        """ Create a new local role. A local role represents a collection of permissions.
+    def add_local_role(self, name: str, permissions: list[str] = None, unique_id: str = None) -> LocalRole:
+        """ Create a new local role.
+
+        A local role represents a collection of permissions.
+
         Identities (local user, group, idp user) can be assigned a role to the application or resource, granting the role's permissions.
+
+        Local roles will be identified by `name` by default, if `unique_id` is provided it will be used as the identifier instead.
+
+        Local roles can be referenced after creation if needed through `self.local_roles[identifier]`
 
         Args:
             name (str): Display name for role
             permissions (list): List of Custom Permission names to include in role. `CustomPermission` must be created separately.
+            unique_id (str, optional): Unique identifier for role for reference by ID
 
         Returns:
             LocalRole
         """
+        if unique_id:
+            identifier = unique_id
+        else:
+            identifier = name
 
-        if name in self.local_roles:
-            raise Exception(f"Local role {name} already defined")
-        self.local_roles[name] = LocalRole(name, permissions, property_definitions=self.property_definitions)
+        if identifier in self.local_roles:
+            raise Exception(f"Local role identified by {identifier} already defined")
+        self.local_roles[identifier] = LocalRole(name, permissions, unique_id=unique_id, property_definitions=self.property_definitions)
 
-        return self.local_roles[name]
+        return self.local_roles[identifier]
 
     def add_idp_idententiy(self, name: str) -> IdPIdentity:
         """ IdP users or groups can be authorized directly to applications and resources by associating permissions and roles with the IdP identity's principal name or email.
@@ -484,6 +522,7 @@ class Identity():
     Args:
         name (string): name of identity
         identity_type (OAAIdentityType): Veza Identity Type (local_user, local_group, idp)
+        unique_id (string, optional): ID of entity for reference by ID
     Attributes:
         name (string): name of identity
         identity_type (OAAIdentityType): Veza Identity Type (local_user, local_group, idp)
@@ -495,8 +534,12 @@ class Identity():
         tags (list): List of tags
     """
 
-    def __init__(self, name: str, identity_type: OAAIdentityType, property_definitions: ApplicationPropertyDefinitions = None) -> None:
+    def __init__(self, name: str, identity_type: OAAIdentityType, unique_id: str = None, property_definitions: ApplicationPropertyDefinitions = None) -> None:
         self.name = name
+        if unique_id:
+            self.unique_id = str(unique_id)
+        else:
+            self.unique_id = None
         self.identity_type = identity_type
         self.application_permissions = []
         self.resource_permissions = {}
@@ -542,7 +585,7 @@ class Identity():
         """
         Add a role to an identity for either the application or application resource/sub-resource
         Args:
-            roles ([str]): List of strings representing the role names
+            roles ([str]): List of strings representing the role identifier
             resource (CustomResource): Optional custom resource, if None role is applied to application
             apply_to_application (bool): Apply permission to application when True, False will replace existing value, None will leave previous setting if any
         """
@@ -568,7 +611,11 @@ class Identity():
             response: JSON serializable dictionary of all the identities permissions and roles
         """
         response = {}
-        response['identity'] = self.name
+        if self.unique_id:
+            response['identity'] = self.unique_id
+        else:
+            response['identity'] = self.name
+
         response['identity_type'] = self.identity_type
         application_permissions = []
         role_assignments = []
@@ -636,9 +683,11 @@ class LocalUser(Identity):
         name (string): name of identity
         identities (list): list of strings for IdP identity association
         groups (list): list of group names as strings to add user too
+        unique_id (string, optional): For reference by ID
 
     Attributes:
         name (string): name of identity
+        id (string): ID of entity for ID based reference
         identities (list): list of strings for IdP identity association
         groups (list): list of group names as strings to add user too
         identity_type (OAAIdentityType): Veza Identity Type (local_user)
@@ -655,8 +704,8 @@ class LocalUser(Identity):
         password_last_changed_at (str): RFC3339 time stamp for last password change
     """
 
-    def __init__(self, name: str, identities: list[str] = None, groups: list[str] = None, property_definitions: ApplicationPropertyDefinitions = None) -> None:
-        super().__init__(name, identity_type=OAAIdentityType.LocalUser, property_definitions=property_definitions)
+    def __init__(self, name: str, identities: list[str] = None, groups: list[str] = None, unique_id: str = None, property_definitions: ApplicationPropertyDefinitions = None) -> None:
+        super().__init__(name, identity_type=OAAIdentityType.LocalUser, unique_id=unique_id, property_definitions=property_definitions)
         self.identities = append_helper(None, identities)
         self.groups = append_helper(None, groups)
 
@@ -719,6 +768,9 @@ class LocalUser(Identity):
                 "custom_properties": self.properties
                 }
 
+        if self.unique_id:
+            user['id'] = self.unique_id
+
         return user
 
 
@@ -728,6 +780,7 @@ class LocalGroup(Identity):
     Args:
         name (string): name of group
         identities (list): list of strings for IdP identity association
+        unique_id (string, optional): Unique identifier for group
 
     Attributes:
         name (string): name of identity
@@ -743,8 +796,8 @@ class LocalGroup(Identity):
         created_at (str): RFC3339 time stamp for group creation time
     """
 
-    def __init__(self, name, identities=None, property_definitions: ApplicationPropertyDefinitions = None):
-        super().__init__(name, identity_type=OAAIdentityType.LocalGroup, property_definitions=property_definitions)
+    def __init__(self, name, identities=None, unique_id: str = None, property_definitions: ApplicationPropertyDefinitions = None):
+        super().__init__(name, identity_type=OAAIdentityType.LocalGroup, unique_id=unique_id, property_definitions=property_definitions)
         self.identities = append_helper(None, identities)
         self.groups = []
         self.created_at = None
@@ -771,14 +824,17 @@ class LocalGroup(Identity):
 
     def to_dict(self) -> dict:
         """ Output group to disctionary for payload """
-        return {"name": self.name,
+        group = {"name": self.name,
                 "identities": self.identities,
                 "created_at": self.created_at,
                 "groups": self.groups,
                 "tags": [tag.__dict__ for tag in self.tags],
                 "custom_properties": self.properties
                 }
+        if self.unique_id:
+            group["id"] = self.unique_id
 
+        return group
 
 class IdPIdentity(Identity):
     """ IdP identity, derived from Identity base class. Used to associate IdP identities (users or groups) directly to resource where concept of local users/groups doesn't apply to application.
@@ -815,6 +871,7 @@ class LocalRole():
     Args:
         name (string): name of local role
         permissions (list): Optional: list of custom permission names (strings) to associate with the role
+        unique_id (string, optional): Unique identifier for role for identification by ID
 
      Attributes:
         name (string): name of local role
@@ -823,14 +880,20 @@ class LocalRole():
 
     """
 
-    def __init__(self, name: str, permissions: list[str] = None, property_definitions: ApplicationPropertyDefinitions = None) -> None:
+    def __init__(self, name: str, permissions: list[str] = None, unique_id: str = None, property_definitions: ApplicationPropertyDefinitions = None) -> None:
         self.name = name
+        if unique_id:
+            self.unique_id = str(unique_id)
+        else:
+            self.unique_id = None
+
         if not permissions:
             self.permissions = []
         else:
             if not isinstance(permissions, list):
                 raise OAATemplateException("permissions must be list")
             self.permissions = permissions
+
 
         self.property_definitions = property_definitions
         self.properties = {}
@@ -898,6 +961,8 @@ class LocalRole():
         response['permissions'] = self.permissions
         response['tags'] = [tag.__dict__ for tag in self.tags]
         response['custom_properties'] = self.properties
+        if self.unique_id:
+            response["id"] = self.unique_id
 
         return response
 

@@ -1,5 +1,13 @@
 # OAA Client Change Log
 
+## 2022/07/14
+* Users, groups and roles can now be created and referenced by a unique identifier separte from `name`.
+  * `add_local_user`, `add_local_group` and `add_local_role` functions all have new optional property `unique_id`
+  * When `unique_id` is passed the entity will be created with the unique identifier in addition to name
+  * When using unique identifiers the `unique_id` value will be used as the key in the `local_users`, `local_groups` and `local_roles` dictionaries
+  * Must use unique identifier for references between entities such as `add_group` and `add_role`
+  * To use `unique_id` all local users, local groups and local roles must have a unique identifier in addition to name
+
 ## 2022/07/01
 * Added support for setting OAA Provider Icons via `Client.update_provider_icon` function.
 * Added `utils.encode_icon_file()` function to assist with base64 encoding icon files

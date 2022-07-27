@@ -1,4 +1,13 @@
+"""
+Copyright 2022 Veza Technologies Inc.
+
+Use of this source code is governed by a the MIT
+license that can be found in the LICENSE file or at
+https://opensource.org/licenses/MIT.
+"""
+
 from requests import delete
+from unittest.mock import patch
 import os
 import pytest
 import uuid
@@ -109,3 +118,13 @@ def test_client_data_source(veza_con):
 
     # delete provider for cleanup
     veza_con.delete_provider(provider_id)
+
+
+# @patch("oaaclient.client.get_provider_list")
+@pytest.mark.parametrize("url",["https://noreply.vezacloud.com", "noreply.vezacloud.com", "noreply.vezacloud.com/", "https://noreply.vezacloud.com/"])
+def test_url_formatter(url):
+    test_api_key = "1234"
+    with patch.object(OAAClient, "get_provider_list", return_value=[]):
+        veza_con = OAAClient(url=url, token=test_api_key)
+
+        assert veza_con.url == "https://noreply.vezacloud.com"

@@ -1,5 +1,11 @@
 #!env python3
 """
+Copyright 2022 Veza Technologies Inc.
+
+Use of this source code is governed by a the MIT
+license that can be found in the LICENSE file or at
+https://opensource.org/licenses/MIT.
+
 Example of using the `CustomApplication` class to model a typical application where users and groups are assigned
 permissions to the application or resources.
 
@@ -10,6 +16,7 @@ export OAA_TOKEN="xxxxxxx"
 export VEZA_URL="https://myveza.vezacloud.com"
 ./sample-app.py
 ```
+
 """
 
 from oaaclient.client import OAAClient, OAAClientError

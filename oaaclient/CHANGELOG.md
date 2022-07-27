@@ -1,5 +1,8 @@
 # OAA Client Change Log
 
+## 2022/07/25
+* Automatically trim trailing slashes from Veza URL for `Client` connection
+
 ## 2022/07/14
 * Users, groups and roles can now be created and referenced by a unique identifier separte from `name`.
   * `add_local_user`, `add_local_group` and `add_local_role` functions all have new optional property `unique_id`

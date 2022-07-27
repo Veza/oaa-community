@@ -1,3 +1,11 @@
+"""
+Copyright 2022 Veza Technologies Inc.
+
+Use of this source code is governed by a the MIT
+license that can be found in the LICENSE file or at
+https://opensource.org/licenses/MIT.
+"""
+
 import os
 import pytest
 import uuid
@@ -10,6 +18,9 @@ from generate_app import generate_app
 from generate_idp import generate_idp
 from generate_app_id_mapping import generate_app_id_mapping
 
+# set the timeout for the push tests, if the the datasource does not parse
+TEST_TIMEOUT = os.getenv("OAA_PUSH_TIMEOUT", 300)
+
 @pytest.fixture
 def veza_con():
     test_deployment = os.getenv("PYTEST_VEZA_HOST")
@@ -21,7 +32,7 @@ def veza_con():
     return veza_con
 
 @pytest.mark.skipif(not os.getenv("PYTEST_VEZA_HOST"), reason="Test host is not configured")
-@pytest.mark.timeout(120)
+@pytest.mark.timeout(TEST_TIMEOUT)
 def test_payload_push(veza_con):
 
     app = generate_app()
@@ -50,17 +61,20 @@ def test_payload_push(veza_con):
         assert warning['message'].startswith("Cannot find identity by names")
 
     data_source = veza_con.get_data_source(data_source_name, provider_id=provider["id"])
-    print(data_source)
     while True:
         data_source = veza_con.get_data_source(data_source_name, provider_id=provider["id"])
-        if data_source["status"] == "SUCCESS":
+        if data_source["status"] == "PENDING":
+            time.sleep(2)
+        elif data_source["status"] == "SUCCESS":
             break
-        time.sleep(2)
+        else:
+            print(data_source)
+            assert False, "Datasource parsing failure"
 
     veza_con.delete_provider(provider["id"])
 
 @pytest.mark.skipif(not os.getenv("PYTEST_VEZA_HOST"), reason="Test host is not configured")
-@pytest.mark.timeout(120)
+@pytest.mark.timeout(TEST_TIMEOUT)
 def test_payload_push_id_mapping(veza_con):
     """ test for app payload where identities are mapped by id instead of name """
 
@@ -97,12 +111,15 @@ def test_payload_push_id_mapping(veza_con):
         assert warning['message'].startswith("Cannot find identity by names")
 
     data_source = veza_con.get_data_source(data_source_name, provider_id=provider["id"])
-    print(data_source)
     while True:
         data_source = veza_con.get_data_source(data_source_name, provider_id=provider["id"])
-        if data_source["status"] == "SUCCESS":
+        if data_source["status"] == "PENDING":
+            time.sleep(2)
+        elif data_source["status"] == "SUCCESS":
             break
-        time.sleep(2)
+        else:
+            print(data_source)
+            assert False, "Datasource parsing failure"
 
     veza_con.delete_provider(provider["id"])
 
@@ -134,7 +151,7 @@ def test_bad_payload(veza_con):
 
 
 @pytest.mark.skipif(not os.getenv("PYTEST_VEZA_HOST"), reason="Test host is not configured")
-@pytest.mark.timeout(120)
+@pytest.mark.timeout(TEST_TIMEOUT)
 def test_idp_payload_push(veza_con):
 
     idp = generate_idp()
@@ -161,10 +178,13 @@ def test_idp_payload_push(veza_con):
 
     while True:
         data_source = veza_con.get_data_source(data_source_name, provider_id=provider["id"])
-        print(data_source)
-        if data_source["status"] == "SUCCESS":
+        if data_source["status"] == "PENDING":
+            time.sleep(2)
+        elif data_source["status"] == "SUCCESS":
             break
-        time.sleep(2)
+        else:
+            print(data_source)
+            assert False, "Datasource parsing failure"
 
     veza_con.delete_provider(provider["id"])
 

@@ -95,11 +95,15 @@ class OAA_SFDC_LightningAPI():
 
         for object_name in object_types:
             object_type = object_types.get(object_name)
-            self.app.add_resource(object_name, "object_type")
+            object_resource = self.app.add_resource(object_name, "object_type")
 
             # iterate object_type permissions and translate them to displayed permissions
             for permissions_set_id in object_type.get("permissions"):
                 translated_permissions = self.__translate_permissions(object_type.get("permissions").get(permissions_set_id))
+                if permissions_set_id not in self.permissions_sets:
+                    log.warning(f"Permission set id not found in discovered permission sets, id {permissions_set_id}")
+                    continue
+
                 permissions_set_name = self.permissions_sets[permissions_set_id].get("name")
 
                 if re.match(r"^\w00", permissions_set_name):
@@ -109,13 +113,19 @@ class OAA_SFDC_LightningAPI():
                     # iterate translated permissions and apply them
                     for permission in translated_permissions:
                         for assignee_id in assignees:
+                            if assignee_id not in self.users:
+                                log.warning(f"Unknown user assigned to permission, permission: '{permission}', user_id: {assignee_id}")
+                                continue
+
                             username = self.users.get(assignee_id).get("username")
-                            self.app.local_users[username].add_permission(permission, resources = [self.app.resources.get(object_name)], apply_to_application = False)
+                            self.app.local_users[username].add_permission(permission, resources = [object_resource], apply_to_application = False)
                 else:
                     # non-profile-based permissions set; apply permissions to OAA group
                     for permission in translated_permissions:
-                        self.app.local_groups[permissions_set_name].add_permission(permission, resources = [self.app.resources.get(object_name)], apply_to_application = False)
-
+                        if permissions_set_name not in self.app.local_groups:
+                            log.warning(f"local group for permission set did not exists. {permissions_set_name}")
+                            continue
+                        self.app.local_groups[permissions_set_name].add_permission(permission, resources = [object_resource], apply_to_application = False)
 
 
     def discover_permissions_sets(self):
@@ -126,14 +136,23 @@ class OAA_SFDC_LightningAPI():
         self.permissions_sets = self.list_permissions_sets_with_assignments()
         for permissions_set_id in self.permissions_sets:
             permissions_set = self.permissions_sets.get(permissions_set_id)
-            # don't create OAA groups for "X00..." profile-based permissions sets
-            if not re.match(r"^\w00", permissions_set.get("name")):
-                self.app.add_local_group(permissions_set.get("name"))
+            permission_set_name = permissions_set.get("name")
 
-                # add assignees to local_group
-                for user_id in permissions_set.get("users"):
-                    user = self.users.get(user_id)
-                    self.app.local_users[user.get("username")].add_group(permissions_set.get("name"))
+            # don't create OAA groups for "X00..." profile-based permissions sets
+            if re.match(r"^\w00", permission_set_name):
+                continue
+
+            self.app.add_local_group(permission_set_name)
+
+            # add assignees to local_group
+            for user_id in permissions_set.get("users"):
+                user = self.users.get(user_id)
+                if not user:
+                    log.warning(f"Unknown user assigned to permission set, permission set: '{permission_set_name}', user_id: {user_id}")
+                    continue
+                self.app.local_users[user.get("username")].add_group(permission_set_name)
+
+        return
 
 
     def discover_users(self):
@@ -146,15 +165,17 @@ class OAA_SFDC_LightningAPI():
             user = self.users.get(user_id)
             self.app.add_local_user(user.get("username"), identities = [user.get("username")])
 
+        discovered_count = len(self.users)
+        log.debug(f"Discovered number of users: {discovered_count}")
+
 
     def list_object_types_and_permissions(self):
         """
         list object types and attached permissions sets
         """
-        base_query = "SELECT Id, Parent.Id, SobjectType, PermissionsCreate, PermissionsDelete, PermissionsEdit, PermissionsModifyAllRecords, PermissionsRead, PermissionsViewAllRecords FROM ObjectPermissions ORDER BY SobjectType"
         object_types = {}
 
-        response = self.__query_all(base_query)
+        response = self.__soql_query_all(object="ObjectPermissions", fields=["Id", "Parent.Id", "SobjectType", "PermissionsCreate", "PermissionsDelete", "PermissionsEdit", "PermissionsModifyAllRecords", "PermissionsRead", "PermissionsViewAllRecords"])
         for item in response:
             # build a dict of permissions in the permissions set
             permissions = {
@@ -177,10 +198,9 @@ class OAA_SFDC_LightningAPI():
         """
         list permissions sets with user assignments
         """
-        base_query = "SELECT name, Id, (SELECT AssigneeId FROM Assignments) FROM PermissionSet"
         permissions_sets = {}
 
-        response = self.__query_all(base_query)
+        response = self.__soql_query_all(object="PermissionSet", fields=["name", "Id", "(SELECT AssigneeId FROM Assignments)"])
         for permissions_set in response:
             assignments = permissions_set.get("Assignments")
             if assignments:
@@ -206,10 +226,9 @@ class OAA_SFDC_LightningAPI():
         list salesforce roles
         TODO: unused
         """
-        base_query = "SELECT name FROM UserRole ORDER BY name"
         roles = {}
 
-        response = self.__query_all(base_query)
+        response = self.__soql_query_all(object="name", fields=["id", "name"])
         for role in response:
             roles[role.get("Id")] = {
                 "name": role.get("Name")
@@ -222,10 +241,9 @@ class OAA_SFDC_LightningAPI():
         """
         list salesforce users
         """
-        base_query = "SELECT username, Id FROM User ORDER BY username"
         users = {}
 
-        response = self.__query_all(base_query)
+        response = self.__soql_query_all(object="user", fields=["username", "id"])
         for user in response:
             users[user.get("Id")] = {
                 "username": user.get("Username")
@@ -239,8 +257,8 @@ class OAA_SFDC_LightningAPI():
         map Salesforce permissions to OAA canonical permissions
         """
         permissions = {
-            "Create": [OAAPermission.DataWrite, OAAPermission.MetadataWrite],
-            "Delete": [OAAPermission.DataWrite, OAAPermission.MetadataWrite],
+            "Create": [OAAPermission.DataCreate, OAAPermission.MetadataCreate],
+            "Delete": [OAAPermission.DataDelete, OAAPermission.MetadataDelete],
             "Edit": [OAAPermission.DataWrite, OAAPermission.MetadataWrite],
             "ModifyAllRecords": [OAAPermission.DataWrite, OAAPermission.MetadataWrite],
             "Read": [OAAPermission.DataRead, OAAPermission.MetadataRead],
@@ -251,29 +269,43 @@ class OAA_SFDC_LightningAPI():
             self.app.add_custom_permission(permission, permissions[permission])
 
 
-    def __query_all(self, query, parameters = {}):
+    def __soql_query_all(self, object: str, fields: list, parameters = None):
         """
         make an API GET request to the salesforce endpoint
         manually aggregate paginated results
         """
-        offset = 0
         result = []
 
+        if not any(["id" == f.lower() for f in fields]):
+            # if id not in the list of fields add it
+            fields.append("id")
+
+        fields_str = ", ".join(fields)
+
+        limit = 2_000
+        query = f"SELECT {fields_str} FROM {object} ORDER BY id ASC LIMIT {limit}"
+
         while True:
-            api_path = f"{self.base_url}/queryAll/?q={query} OFFSET {offset}"
-            log.debug(f"making GET request to {api_path}")
+            api_path = f"{self.base_url}/queryAll/?q={query}"
+            log.debug(f"query string: '{query}'")
+            # log.debug(f"making GET request to {api_path}")
             response = requests.get(api_path, headers = self.request_headers, params = parameters)
 
             if not response.ok:
-                raise HTTPError(response = response)
+                raise HTTPError(response.text, response=response)
+
             body = response.json()
 
             if "records" in body:
-                result.extend(body.get("records"))
-                if body.get("done"):
+                records = body["records"]
+                if not records:
+                    # no more records
                     break
-                else:
-                    offset = offset + body.get("totalSize")
+
+                result.extend(records)
+                last_record = records[-1]
+                query = f"SELECT {fields_str} FROM {object} WHERE id > '{last_record['Id']}' ORDER BY id ASC LIMIT {limit}"
+
             else:
                 log.warning(f"unexpected HTTP GET response")
                 log.warning(body)
@@ -290,7 +322,7 @@ class OAA_SFDC_LightningAPI():
 
         # process response
         if not response.ok:
-            raise HTTPError(response = response)
+            raise HTTPError(response.text, response=response)
         body = response.json()
 
         if type(body) is list:
@@ -381,7 +413,7 @@ def run(veza_api_key, veza_url, sfdc_client_id, sfdc_client_secret, sfdc_passwor
     try:
         salesforce_app.discover()
     except HTTPError as error:
-        log.error(f"Error during discovery: Salesforce API returned error: {error.response.status_code} for {error.request_url}")
+        log.error(f"Error during discovery: Salesforce API returned error: {error.response.status_code} for {error.response.url}")
         log.error(error)
         log.error("exiting")
         sys.exit(1)

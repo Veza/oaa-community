@@ -8,6 +8,7 @@ import oaaclient.utils as utils
 
 from generate_app import generate_app
 from generate_idp import generate_idp
+from generate_app_id_mapping import generate_app_id_mapping
 
 @pytest.fixture
 def veza_con():
@@ -38,6 +39,53 @@ def test_payload_push(veza_con):
                                            data_source_name=data_source_name,
                                            application_object=app
                                            )
+    if not response:
+        assert False
+
+    # Veza API always returns the warnings key, the list may be empty, in this case we expect it not to be
+    assert "warnings" in response
+    # since our payload includes fake identities expect warnings about not matching identities
+    assert response["warnings"] is not None
+    for warning in response["warnings"]:
+        assert warning['message'].startswith("Cannot find identity by names")
+
+    data_source = veza_con.get_data_source(data_source_name, provider_id=provider["id"])
+    print(data_source)
+    while True:
+        data_source = veza_con.get_data_source(data_source_name, provider_id=provider["id"])
+        if data_source["status"] == "SUCCESS":
+            break
+        time.sleep(2)
+
+    veza_con.delete_provider(provider["id"])
+
+@pytest.mark.skipif(not os.getenv("PYTEST_VEZA_HOST"), reason="Test host is not configured")
+@pytest.mark.timeout(120)
+def test_payload_push_id_mapping(veza_con):
+    """ test for app payload where identities are mapped by id instead of name """
+
+    app = generate_app_id_mapping()
+    provider_name = f"Pytest Custom ID Based Apps {uuid.uuid4()}"
+    data_source_name = "pytest-test_payload_push_id_mappings"
+    provider = veza_con.get_provider(provider_name)
+    assert provider is None
+
+    provider = veza_con.create_provider(provider_name, "application")
+
+    b64_icon = utils.encode_icon_file("tests/oaa_icon.png")
+    veza_con.update_provider_icon(provider_id=provider['id'], base64_icon=b64_icon)
+
+    response = None
+    try:
+        response = veza_con.push_application(provider_name,
+                                            data_source_name=data_source_name,
+                                            application_object=app
+                                            )
+    except OAAClientError as e:
+        print(e)
+        print(e.details)
+        assert False
+
     if not response:
         assert False
 

@@ -4,6 +4,7 @@ import os
 
 from oaaclient.templates import CustomApplication, CustomPermission, OAAPermission, OAAIdentityType, OAATemplateException, Tag, OAAPropertyType
 from generate_app import generate_app, GENERATED_APP_PAYLOAD
+from generate_app_id_mapping import generate_app_id_mapping, GENERATED_APP_ID_MAPPINGS_PAYLOAD
 
 
 def test_instantiate():
@@ -232,6 +233,11 @@ def test_generate_app():
     # ensure the app is as we expect
     assert payload == json.loads(GENERATED_APP_PAYLOAD)
 
+def test_generate_app_id_mapping():
+    app = generate_app_id_mapping()
+    payload = app.get_payload()
+
+    assert payload == json.loads(GENERATED_APP_ID_MAPPINGS_PAYLOAD)
 
 def test_custom_properties():
     app = CustomApplication(name="testapp", application_type="pytest", description="This is a test")

@@ -1,5 +1,12 @@
-from oaaclient.templates import CustomApplication, Tag, OAAPermission, OAAPropertyType
+"""
+Copyright 2022 Veza Technologies Inc.
 
+Use of this source code is governed by a the MIT
+license that can be found in the LICENSE file or at
+https://opensource.org/licenses/MIT.
+"""
+
+from oaaclient.templates import CustomApplication, Tag, OAAPermission, OAAPropertyType
 
 def generate_app_id_mapping():
     """ generates a complete OAA custom application payload where local users, groups and roles are mapped by a unique identifier"""

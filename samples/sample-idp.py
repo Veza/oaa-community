@@ -1,5 +1,11 @@
 #!env python3
 """
+Copyright 2022 Veza Technologies Inc.
+
+Use of this source code is governed by a the MIT
+license that can be found in the LICENSE file or at
+https://opensource.org/licenses/MIT.
+
 Example of using the `CustomIdPProvider` class to model an identity provider as a source of users.
 
 If you want to run the code you will need to export environment variables for the Veza URL, user and API keys.

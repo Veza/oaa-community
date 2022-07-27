@@ -1,4 +1,12 @@
 #!env python3
+"""
+Copyright 2022 Veza Technologies Inc.
+
+Use of this source code is governed by a the MIT
+license that can be found in the LICENSE file or at
+https://opensource.org/licenses/MIT.
+"""
+
 from datetime import datetime
 from enum import Enum
 from typing import Union, List
@@ -62,6 +70,7 @@ class OAAClient():
             self.url = f"https://{url}"
         else:
             self.url = url
+        self.url = self.url.rstrip("/")
 
         # for development purposes only sometimes system is run without signed certificates,
         # disable certificate verification only if VEZA_UNSAFE_HTTPS OS env variable is set to true
@@ -69,7 +78,6 @@ class OAAClient():
         unsafe_https = os.getenv("VEZA_UNSAFE_HTTPS", "")
         if unsafe_https.lower() == "true":
             self.verify_ssl = False
-        self.url.rstrip("/")
 
         self.username = username
 

@@ -196,7 +196,6 @@ GENERATED_APP_PAYLOAD = """
           "last_login_at": "2002-02-01T00:00:00.000Z",
           "deactivated_at": "2003-03-01T00:00:00.000Z",
           "password_last_changed_at": "2004-04-01T00:00:00.000Z",
-          "tags": [],
           "custom_properties": {
             "is_guest": false,
             "user_id": 0,
@@ -224,7 +223,6 @@ GENERATED_APP_PAYLOAD = """
           "last_login_at": "2002-02-01T00:00:00.000Z",
           "deactivated_at": "2003-03-01T00:00:00.000Z",
           "password_last_changed_at": "2004-04-01T00:00:00.000Z",
-          "tags": [],
           "custom_properties": {
             "is_guest": false,
             "user_id": 1,
@@ -243,13 +241,11 @@ GENERATED_APP_PAYLOAD = """
           "identities": [
             "sue@example.com"
           ],
-          "groups": null,
           "is_active": true,
           "created_at": "2001-01-01T00:00:00.000Z",
           "last_login_at": "2002-02-01T00:00:00.000Z",
           "deactivated_at": "2003-03-01T00:00:00.000Z",
           "password_last_changed_at": "2004-04-01T00:00:00.000Z",
-          "tags": [],
           "custom_properties": {
             "is_guest": false,
             "user_id": 2,
@@ -268,13 +264,14 @@ GENERATED_APP_PAYLOAD = """
           "identities": [
             "rob@example.com"
           ],
-          "groups": ["group3"],
+          "groups": [
+            "group3"
+          ],
           "is_active": true,
           "created_at": "2001-01-01T00:00:00.000Z",
           "last_login_at": "2002-02-01T00:00:00.000Z",
           "deactivated_at": "2003-03-01T00:00:00.000Z",
           "password_last_changed_at": "2004-04-01T00:00:00.000Z",
-          "tags": [],
           "custom_properties": {
             "is_guest": false,
             "user_id": 3,
@@ -292,31 +289,22 @@ GENERATED_APP_PAYLOAD = """
       "local_groups": [
         {
           "name": "group1",
-          "identities": null,
-          "created_at": null,
-          "groups": [],
-          "tags": [],
           "custom_properties": {
             "group_id": 1
           }
         },
         {
           "name": "group2",
-          "identities": null,
-          "created_at": null,
-          "groups": [],
-          "tags": [],
           "custom_properties": {
             "group_id": 2
           }
         },
         {
           "name": "group3",
-          "identities": null,
-          "created_at": null,
-          "groups": ["group1", "group2"],
-          "tags": [],
-          "custom_properties": {}
+          "groups": [
+            "group1",
+            "group2"
+          ]
         }
       ],
       "local_roles": [
@@ -352,8 +340,6 @@ GENERATED_APP_PAYLOAD = """
           "name": "thing1",
           "resource_type": "thing",
           "description": "thing1",
-          "connections": [],
-          "sub_resources": [],
           "custom_properties": {
             "private": false,
             "unique_id": 1,
@@ -363,28 +349,21 @@ GENERATED_APP_PAYLOAD = """
               "thing3"
             ],
             "publish_date": "1959-03-12T00:00:00.000Z"
-          },
-          "tags": []
+          }
         },
         {
           "name": "thing2",
           "resource_type": "thing",
-          "description": null,
-          "connections": [],
           "sub_resources": [
             {
               "name": "cog1",
               "resource_type": "cog",
-              "description": null,
               "connections": [
                 {
                   "id": "service_account@some-project.iam.gserviceaccount.com",
                   "node_type": "GoogleCloudServiceAccount"
-                 }
-              ],
-              "sub_resources": [],
-              "custom_properties": {},
-              "tags": []
+                }
+              ]
             }
           ],
           "custom_properties": {
@@ -396,8 +375,7 @@ GENERATED_APP_PAYLOAD = """
               "thing3"
             ],
             "publish_date": "1959-03-12T00:00:00.000Z"
-          },
-          "tags": []
+          }
         }
       ]
     }
@@ -453,7 +431,6 @@ GENERATED_APP_PAYLOAD = """
     {
       "identity": "bob",
       "identity_type": "local_user",
-      "application_permissions": [],
       "role_assignments": [
         {
           "application": "pytest generated app",
@@ -469,22 +446,17 @@ GENERATED_APP_PAYLOAD = """
       "application_permissions": [
         {
           "application": "pytest generated app",
-          "resource": "thing2",
-          "permission": "view"
-        },
-        {
-          "application": "pytest generated app",
-          "resource": "thing2.cog1",
+          "resources": [
+            "thing2",
+            "thing2.cog1"
+          ],
           "permission": "view"
         }
-      ],
-      "role_assignments": []
+      ]
     },
     {
       "identity": "sue",
-      "identity_type": "local_user",
-      "application_permissions": [],
-      "role_assignments": []
+      "identity_type": "local_user"
     },
     {
       "identity": "rob",
@@ -493,26 +465,24 @@ GENERATED_APP_PAYLOAD = """
         {
           "application": "pytest generated app",
           "permission": "manage",
-          "resource": null
+          "apply_to_application": true
         },
         {
           "application": "pytest generated app",
-          "resource": "thing1",
+          "resources": [
+            "thing1"
+          ],
           "permission": "manage"
         }
-      ],
-      "role_assignments": []
+      ]
     },
     {
       "identity": "group1",
-      "identity_type": "local_group",
-      "application_permissions": [],
-      "role_assignments": []
+      "identity_type": "local_group"
     },
     {
       "identity": "group2",
       "identity_type": "local_group",
-      "application_permissions": [],
       "role_assignments": [
         {
           "application": "pytest generated app",
@@ -526,9 +496,7 @@ GENERATED_APP_PAYLOAD = """
     },
     {
       "identity": "group3",
-      "identity_type": "local_group",
-      "application_permissions": [],
-      "role_assignments": []
+      "identity_type": "local_group"
     }
   ]
 }

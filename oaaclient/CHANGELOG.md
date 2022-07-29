@@ -1,5 +1,11 @@
 # OAA Client Change Log
 
+## 2022/07/27
+* Changes to reduce OAA paylood size during transfer.
+  * Removed unset/default values from payload
+  * Option to enable GZIP compression of payload
+  * Structure for identity to resource permissions
+
 ## 2022/07/25
 * Automatically trim trailing slashes from Veza URL for `Client` connection
 

@@ -192,7 +192,6 @@ GENERATED_APP_ID_MAPPINGS_PAYLOAD = """
           "last_login_at": "2002-02-01T00:00:00.000Z",
           "deactivated_at": "2003-03-01T00:00:00.000Z",
           "password_last_changed_at": "2004-04-01T00:00:00.000Z",
-          "tags": [],
           "custom_properties": {
             "is_guest": false,
             "birthday": "2000-01-01T00:00:00.000Z"
@@ -213,7 +212,6 @@ GENERATED_APP_ID_MAPPINGS_PAYLOAD = """
           "last_login_at": "2002-02-01T00:00:00.000Z",
           "deactivated_at": "2003-03-01T00:00:00.000Z",
           "password_last_changed_at": "2004-04-01T00:00:00.000Z",
-          "tags": [],
           "custom_properties": {
             "is_guest": false,
             "birthday": "2000-01-01T00:00:00.000Z"
@@ -233,7 +231,6 @@ GENERATED_APP_ID_MAPPINGS_PAYLOAD = """
           "last_login_at": "2002-02-01T00:00:00.000Z",
           "deactivated_at": "2003-03-01T00:00:00.000Z",
           "password_last_changed_at": "2004-04-01T00:00:00.000Z",
-          "tags": [],
           "custom_properties": {
             "is_guest": false,
             "birthday": "2000-01-01T00:00:00.000Z"
@@ -253,7 +250,6 @@ GENERATED_APP_ID_MAPPINGS_PAYLOAD = """
           "last_login_at": "2002-02-01T00:00:00.000Z",
           "deactivated_at": "2003-03-01T00:00:00.000Z",
           "password_last_changed_at": "2004-04-01T00:00:00.000Z",
-          "tags": [],
           "custom_properties": {
             "is_guest": false,
             "birthday": "2000-01-01T00:00:00.000Z"
@@ -264,10 +260,6 @@ GENERATED_APP_ID_MAPPINGS_PAYLOAD = """
       "local_groups": [
         {
           "name": "group1",
-          "identities": null,
-          "created_at": null,
-          "groups": [],
-          "tags": [],
           "custom_properties": {
             "group_id": 1
           },
@@ -275,10 +267,6 @@ GENERATED_APP_ID_MAPPINGS_PAYLOAD = """
         },
         {
           "name": "group2",
-          "identities": null,
-          "created_at": null,
-          "groups": [],
-          "tags": [],
           "custom_properties": {
             "group_id": 2
           },
@@ -286,14 +274,10 @@ GENERATED_APP_ID_MAPPINGS_PAYLOAD = """
         },
         {
           "name": "group3",
-          "identities": null,
-          "created_at": null,
           "groups": [
             "g1",
             "g2"
           ],
-          "tags": [],
-          "custom_properties": {},
           "id": "g3"
         }
       ],
@@ -332,8 +316,6 @@ GENERATED_APP_ID_MAPPINGS_PAYLOAD = """
           "name": "thing1",
           "resource_type": "thing",
           "description": "thing1",
-          "connections": [],
-          "sub_resources": [],
           "custom_properties": {
             "private": false,
             "unique_id": 1,
@@ -343,28 +325,21 @@ GENERATED_APP_ID_MAPPINGS_PAYLOAD = """
               "thing3"
             ],
             "publish_date": "1959-03-12T00:00:00.000Z"
-          },
-          "tags": []
+          }
         },
         {
           "name": "thing2",
           "resource_type": "thing",
-          "description": null,
-          "connections": [],
           "sub_resources": [
             {
               "name": "cog1",
               "resource_type": "cog",
-              "description": null,
               "connections": [
                 {
                   "id": "service_account@some-project.iam.gserviceaccount.com",
                   "node_type": "GoogleCloudServiceAccount"
                 }
-              ],
-              "sub_resources": [],
-              "custom_properties": {},
-              "tags": []
+              ]
             }
           ],
           "custom_properties": {
@@ -376,8 +351,7 @@ GENERATED_APP_ID_MAPPINGS_PAYLOAD = """
               "thing3"
             ],
             "publish_date": "1959-03-12T00:00:00.000Z"
-          },
-          "tags": []
+          }
         }
       ]
     }
@@ -432,14 +406,11 @@ GENERATED_APP_ID_MAPPINGS_PAYLOAD = """
   "identity_to_permissions": [
     {
       "identity": "1234",
-      "identity_type": "local_user",
-      "application_permissions": [],
-      "role_assignments": []
+      "identity_type": "local_user"
     },
     {
       "identity": "1235",
       "identity_type": "local_user",
-      "application_permissions": [],
       "role_assignments": [
         {
           "application": "pytest unique id app",
@@ -455,16 +426,13 @@ GENERATED_APP_ID_MAPPINGS_PAYLOAD = """
       "application_permissions": [
         {
           "application": "pytest unique id app",
-          "resource": "thing2",
-          "permission": "view"
-        },
-        {
-          "application": "pytest unique id app",
-          "resource": "thing2.cog1",
+          "resources": [
+            "thing2",
+            "thing2.cog1"
+          ],
           "permission": "view"
         }
-      ],
-      "role_assignments": []
+      ]
     },
     {
       "identity": "1237",
@@ -473,26 +441,24 @@ GENERATED_APP_ID_MAPPINGS_PAYLOAD = """
         {
           "application": "pytest unique id app",
           "permission": "manage",
-          "resource": null
+          "apply_to_application": true
         },
         {
           "application": "pytest unique id app",
-          "resource": "thing1",
+          "resources": [
+            "thing1"
+          ],
           "permission": "manage"
         }
-      ],
-      "role_assignments": []
+      ]
     },
     {
       "identity": "g1",
-      "identity_type": "local_group",
-      "application_permissions": [],
-      "role_assignments": []
+      "identity_type": "local_group"
     },
     {
       "identity": "g2",
       "identity_type": "local_group",
-      "application_permissions": [],
       "role_assignments": [
         {
           "application": "pytest unique id app",
@@ -506,9 +472,7 @@ GENERATED_APP_ID_MAPPINGS_PAYLOAD = """
     },
     {
       "identity": "g3",
-      "identity_type": "local_group",
-      "application_permissions": [],
-      "role_assignments": []
+      "identity_type": "local_group"
     }
   ]
 }

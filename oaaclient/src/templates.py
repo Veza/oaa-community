@@ -445,7 +445,8 @@ class CustomResource():
         repr['custom_properties'] = self.properties
         repr["tags"] = [tag.__dict__ for tag in self.tags]
 
-        return repr
+        # filter out None/empty values before return
+        return {k: v for k, v in repr.items() if v}
 
     def add_sub_resource(self, name: str, resource_type: str, description: str = None) -> CustomResource:
         """ Create a new sub-resource under current resource
@@ -629,12 +630,11 @@ class Identity():
         role_assignments = []
 
         for p in self.application_permissions:
-            application_permissions.append({"application": application_name, "permission": p, "resource": None})
+            application_permissions.append({"application": application_name, "permission": p, "apply_to_application": True})
 
         for permission in self.resource_permissions:
-            for resource in self.resource_permissions[permission]:
-                application_permissions.append({"application": application_name,
-                                                "resource": resource,
+            application_permissions.append({"application": application_name,
+                                                "resources": self.resource_permissions[permission],
                                                 "permission": permission
                                                 })
 
@@ -648,8 +648,10 @@ class Identity():
                                      "resources": list(set(self.role_assignments[role]["resources"]))
                                      })
 
-        response['application_permissions'] = application_permissions
-        response['role_assignments'] = role_assignments
+        if application_permissions:
+            response['application_permissions'] = application_permissions
+        if role_assignments:
+            response['role_assignments'] = role_assignments
 
         return response
 
@@ -779,7 +781,8 @@ class LocalUser(Identity):
         if self.unique_id:
             user['id'] = self.unique_id
 
-        return user
+        # filter out None/empty values before return
+        return {k: v for k, v in user.items() if v}
 
 
 class LocalGroup(Identity):
@@ -842,7 +845,8 @@ class LocalGroup(Identity):
         if self.unique_id:
             group["id"] = self.unique_id
 
-        return group
+        # filter out None/empty values before return
+        return {k: v for k, v in group.items() if v}
 
 class IdPIdentity(Identity):
     """ IdP identity, derived from Identity base class. Used to associate IdP identities (users or groups) directly to resource where concept of local users/groups doesn't apply to application.

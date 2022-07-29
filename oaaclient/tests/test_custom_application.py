@@ -104,7 +104,8 @@ def test_simple_app():
             if resource['name'] == expected['name']:
                 found = True
                 assert resource["resource_type"] == expected["resource_type"]
-                assert resource["description"] == expected["description"]
+                if expected.get("description"):
+                  assert resource["description"] == expected["description"]
                 break
 
         assert found
@@ -119,18 +120,18 @@ def test_simple_app():
 
     for user in app_payload['local_users']:
         if user['name'] == "user1":
-            assert user['identities'] is None
-            assert user['groups'] is None
-            assert len(user['tags']) == 1
+            assert user.get("identities") is None
+            assert user.get("groups") is None
+            assert len(user.get("tags")) == 1
             assert {'key': 'mytag', 'value': ''} in user['tags']
         elif user['name'] == "user2":
             assert user['identities'] == ["user2@pytest.com"]
-            assert user['groups'] is None
+            assert user.get("groups") is None
         elif user['name'] == "user3":
-            assert user['identities'] is None
+            assert user.get("identities") is None
             assert user['groups'] == ["group1"]
         elif user['name'] == "user4":
-            assert user['identities'] is None
+            assert user.get("identities") is None
             assert user['groups'] == ["group1", "group2"]
 
     permissions = payload['permissions']
@@ -151,22 +152,19 @@ def test_simple_app():
     assert user1_permissions['identity_type'] == "local_user"
 
     # test the expected permissions are present
-    user1_resource1_permissions = [p for p in user1_permissions['application_permissions'] if p['resource'] == "resource1"]
-    assert len(user1_resource1_permissions) == 2
-    assert {'application': 'testapp', 'resource': 'resource1', 'permission': 'write'} in user1_resource1_permissions
-    assert {'application': 'testapp', 'resource': 'resource1', 'permission': 'read'} in user1_resource1_permissions
-
-    # test that permission for resource1.sub1 are present
-    assert len([p for p in user1_permissions['application_permissions'] if p['resource'] == "resource1.sub1"]) == 1
+    assert len(user1_permissions['application_permissions']) == 3
+    assert {'application': 'testapp', 'permission': 'write', 'apply_to_application': True} in user1_permissions['application_permissions']
+    assert {'application': 'testapp', 'resources': ['resource1'], 'permission': 'write'} in user1_permissions['application_permissions']
+    assert {'application': 'testapp', 'resources': ['resource1', 'resource1.sub1'], 'permission': 'read'} in user1_permissions['application_permissions']
 
     matches = [e for e in identity_to_permissions if e['identity'] == "group1"]
     assert len(matches) == 1  # should not be multiple entries with same username
     group1_permissions = matches[0]
     assert group1_permissions['identity_type'] == "local_group"
 
-    group1_resource2_permissions = [p for p in group1_permissions['application_permissions'] if p['resource'] == "resource2"]
-    assert len(group1_resource2_permissions) == 1
-    assert {'application': 'testapp', 'permission': 'read', 'resource': 'resource2'} in group1_resource2_permissions
+    assert len(group1_permissions['application_permissions']) == 2
+    assert {'application': 'testapp', 'permission': 'read', 'apply_to_application': True} in group1_permissions['application_permissions']
+    assert {'application': 'testapp', 'resources': ['resource2'], 'permission': 'read'} in group1_permissions['application_permissions']
 
     # test whole thing can be serialized to json
     assert json.dumps(payload)
@@ -381,38 +379,17 @@ CUSTOM_PROPERTIES_PAYLOAD = """
       "local_users": [
         {
           "name": "bob",
-          "identities": null,
-          "groups": null,
-          "is_active": null,
-          "created_at": null,
-          "last_login_at": null,
-          "deactivated_at": null,
-          "password_last_changed_at": null,
-          "tags": [],
           "custom_properties": {
             "guest": true
           }
         },
         {
-          "name": "sue",
-          "identities": null,
-          "groups": null,
-          "is_active": null,
-          "created_at": null,
-          "last_login_at": null,
-          "deactivated_at": null,
-          "password_last_changed_at": null,
-          "tags": [],
-          "custom_properties": {}
+          "name": "sue"
         }
       ],
       "local_groups": [
         {
           "name": "admins",
-          "identities": null,
-          "created_at": null,
-          "groups": [],
-          "tags": [],
           "custom_properties": {
             "group_email": "admins@example.com"
           }
@@ -438,33 +415,22 @@ CUSTOM_PROPERTIES_PAYLOAD = """
           "name": "thing1",
           "resource_type": "thing",
           "description": "test description",
-          "connections": [],
           "sub_resources": [
             {
               "name": "sub_thing",
               "resource_type": "thing",
-              "description": null,
-              "connections": [],
-              "sub_resources": [],
               "custom_properties": {
                 "owner": "bob"
-              },
-              "tags": []
+              }
             }
           ],
           "custom_properties": {
             "owner": "jim"
-          },
-          "tags": []
+          }
         },
         {
           "name": "cog1",
-          "resource_type": "cog",
-          "description": null,
-          "connections": [],
-          "sub_resources": [],
-          "custom_properties": {},
-          "tags": []
+          "resource_type": "cog"
         }
       ]
     }
@@ -481,21 +447,15 @@ CUSTOM_PROPERTIES_PAYLOAD = """
   "identity_to_permissions": [
     {
       "identity": "bob",
-      "identity_type": "local_user",
-      "application_permissions": [],
-      "role_assignments": []
+      "identity_type": "local_user"
     },
     {
       "identity": "sue",
-      "identity_type": "local_user",
-      "application_permissions": [],
-      "role_assignments": []
+      "identity_type": "local_user"
     },
     {
       "identity": "admins",
-      "identity_type": "local_group",
-      "application_permissions": [],
-      "role_assignments": []
+      "identity_type": "local_group"
     }
   ]
 }

@@ -11,7 +11,10 @@ from datetime import datetime
 from enum import Enum
 from typing import Union, List
 import argparse
+import base64
+import gzip
 import json
+import logging
 import os
 import re
 import requests
@@ -21,6 +24,7 @@ from oaaclient.templates import CustomApplication, CustomIdPProvider
 import oaaclient.utils as oaautils
 PROVIDER_ICON_MAX_SIZE = 64_000
 
+log = logging.getLogger(__name__)
 
 class OAAClientError(Exception):
     """Error raised by OAAClient
@@ -91,6 +95,7 @@ class OAAClient():
         if not self.api_key:
             raise OAAClientError("MISSING_AUTH", "API key cannot be None")
 
+        self.enable_compression = False
         # test connection to validate host and credentials
         providers = self.get_provider_list()
 
@@ -293,7 +298,21 @@ class OAAClient():
             with open(out_name, "w") as f:
                 f.write(json.dumps(metadata, indent=2))
 
-        payload = {"id": provider["id"], "data_source_id": data_source["id"], "json_data": json.dumps(metadata)}
+        if self.enable_compression:
+            log.debug("Compressing payload")
+            payload_bytes = json.dumps(metadata).encode()
+            payload_size = sys.getsizeof(payload_bytes)
+            compressed_bytes = gzip.compress(payload_bytes)
+            del payload_bytes
+
+            encoded = base64.b64encode(compressed_bytes).decode()
+            encoded_size = sys.getsizeof(encoded)
+            del compressed_bytes
+            log.debug(f"Compression complete, payload size: {payload_size}, encoded compressed: {encoded_size}")
+            payload = {"id": provider["id"], "data_source_id": data_source["id"], "json_data": encoded, "compression_type": "GZIP"}
+        else:
+            payload = {"id": provider["id"], "data_source_id": data_source["id"], "json_data": json.dumps(metadata)}
+
         result = self.__perform_post(f"/api/v1/providers/custom/{provider['id']}/datasources/{data_source['id']}:push", payload)
 
         return result
@@ -396,7 +415,7 @@ class OAAClient():
         headers = {"Authorization": f"Bearer {self.api_key}"}
 
         api_path = api_path.lstrip("/")
-        response = requests.post(f"{self.url}/{api_path}", headers=headers, json=data, timeout=60, verify=self.verify_ssl)
+        response = requests.post(f"{self.url}/{api_path}", headers=headers, json=data, timeout=300, verify=self.verify_ssl)
         if response.ok:
             return response.json()
         else:
@@ -411,8 +430,8 @@ class OAAClient():
                     for e in error['details']:
                         details.append(e)
                 raise OAAClientError(error['code'], message, status_code=response.status_code, details=details)
-            except json.decoder.JSONDecodeError:
-                raise OAAClientError("ERROR", f"{response.reason} - {response.url}", response.status_code)
+            except Exception:
+                raise OAAClientError("ERROR", f"{response.reason} - {response.url}", status_code=response.status_code)
 
     def api_delete(self, api_path:str) -> dict:
         """Perform REST API DELETE operation

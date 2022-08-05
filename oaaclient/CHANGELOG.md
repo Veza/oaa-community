@@ -1,4 +1,6 @@
 # OAA Client Change Log
+## 2022/08/05
+* Improvements to OAAClientError exceptions raised when API returns errors and additional test cases
 
 ## 2022/07/27
 * Changes to reduce OAA paylood size during transfer.

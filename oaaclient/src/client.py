@@ -19,6 +19,7 @@ import os
 import re
 import requests
 import sys
+from requests.exceptions import JSONDecodeError as RequestsJSONDecodeError
 
 from oaaclient.templates import CustomApplication, CustomIdPProvider
 import oaaclient.utils as oaautils
@@ -378,17 +379,14 @@ class OAAClient():
             # TODO: handle non json response
             try:
                 error = response.json()
-                if "message" in error:
-                    message = error['message']
-                else:
-                    message = "Unknown error in GET"
-                if "code" in error:
-                    code = error['code']
-                else:
-                    code = "UNKNOWN"
-                raise OAAClientError(code, message, status_code=response.status_code)
-            except json.decoder.JSONDecodeError:
+            except RequestsJSONDecodeError:
+                log.error("Unable to process API error response as JSON, raising generic response")
                 raise OAAClientError("ERROR", response.reason, response.status_code)
+            # process JSON response
+            message = error.get("message", "Unknown error durring GET")
+            code = error.get("code", "UNKNOWN")
+            raise OAAClientError(code, message, status_code=response.status_code, details=error.get("details", []))
+
 
     def api_post(self, api_path: str, data: dict) -> dict:
         """Perform Veza API POST operation
@@ -421,17 +419,15 @@ class OAAClient():
         else:
             try:
                 error = response.json()
-                if "message" in error:
-                    message = error['message']
-                else:
-                    message = "Unknown error during POST"
-                if "details" in error:
-                    details = []
-                    for e in error['details']:
-                        details.append(e)
-                raise OAAClientError(error['code'], message, status_code=response.status_code, details=details)
-            except Exception:
+            except RequestsJSONDecodeError as e:
+                log.error("Unable to process API error response as JSON, raising generic response")
                 raise OAAClientError("ERROR", f"{response.reason} - {response.url}", status_code=response.status_code)
+            # process JSON response
+            message = error.get("message", "Unknown error durring POST")
+            code = error.get("code", "UNKNOWN")
+            raise OAAClientError(code, message, status_code=response.status_code, details=error.get("details", []))
+
+
 
     def api_delete(self, api_path:str) -> dict:
         """Perform REST API DELETE operation
@@ -455,17 +451,14 @@ class OAAClient():
         else:
             try:
                 error = response.json()
-                if "message" in error:
-                    message = error['message']
-                else:
-                    message = "Unknown error during POST"
-                if "details" in error:
-                    details = []
-                    for e in error['details']:
-                        details.append(e)
-                raise OAAClientError(error['code'], message, status_code=response.status_code, details=details)
-            except json.decoder.JSONDecodeError:
+            except RequestsJSONDecodeError:
+                log.error("Unable to process API error response as JSON, raising generic response")
                 raise OAAClientError("ERROR", f"{response.reason} - {response.url}", response.status_code)
+            # process JSON response
+            message = error.get("message", "Unknown error durring DELETE")
+            code = error.get("code", "UNKNOWN")
+            raise OAAClientError(code, message, status_code=response.status_code, details=error.get("details", []))
+
 
 def main():
     parser = argparse.ArgumentParser()

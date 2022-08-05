@@ -18,7 +18,6 @@ import re
 import requests
 import sys
 
-logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s', level=logging.INFO)
 log = logging.getLogger(__name__)
 
 
@@ -68,8 +67,8 @@ class OAAGitLab():
             log.error(f"Error calling GitLab API ({e.response.status_code})")
             raise(HTTPError)
 
-        if not calling_user['is_admin']:
-            log.warning(f"Calling GitLab API as non-admin user {calling_user['username']}, discovery may be limitted ")
+        if not calling_user.get("is_admin"):
+            raise Exception(f"GitLab access token user must have Admin Access Level. Calling user: {calling_user['username']}")
 
         self.__populate_permissions()
 
@@ -191,7 +190,7 @@ class OAAGitLab():
             group_name = group['name']
             group_id = group['id']
             self.group_parent_ids[group_id] = group['parent_id']
-            log.info(f"Group - {group_name}")
+            log.debug(f"Group - {group_name}")
             self.app.add_local_group(group_name)
 
             # get group membership
@@ -219,7 +218,7 @@ class OAAGitLab():
             project_name = project['name_with_namespace']
             project_id = project['id']
             description = project['description']
-            log.info(f"Project - {project_name}")
+            log.debug(f"Project - {project_name}")
             self.app.add_resource(project_name, "project", description=description)
             self.app.resources[project_name].set_property("gitlab_id", project_id)
 
@@ -228,8 +227,7 @@ class OAAGitLab():
                 group_id = project["namespace"]["id"]
                 self.assign_group_permissions(self.app.resources[project_name], group_id)
             else:
-                # import pdb; pdb.set_trace()
-                log.info(f"Non-group namespace {project['namespace']['kind']}")
+                log.warning(f"Non-group namespace {project['namespace']['kind']}")
 
             # get individual member permissions
             project_members = self.__gl_api_get(f"api/v4/projects/{project_id}/members")
@@ -349,15 +347,17 @@ def run(gitlab_url: str, gitlab_access_token: str, veza_url: str, veza_user: str
         log.error(f"Unable to connect to Veza ({veza_url})")
         log.error(e.message)
         raise Exception(f"Unnable to connect to Veza ({veza_url})")
-    gitlab_app = OAAGitLab(gitlab_url, gitlab_access_token)
 
     try:
+        gitlab_app = OAAGitLab(gitlab_url, gitlab_access_token)
         gitlab_app.discover()
     except HTTPError as e:
         log.error(f"Error during discovery: GitLab API returned error: {e.response.status_code} for {e.request.url}")
         log.error(e)
-        raise Exception(f"Error during discovery: GitLab API returned error: {e.response.status_code} for {e.request.url}")
-
+        raise e
+    except Exception as e:
+        log.error(e)
+        raise e
     # payload = gitlab_app.app.get_payload()
     # log.debug(json.dumps(payload, indent=2))
 
@@ -372,17 +372,25 @@ def run(gitlab_url: str, gitlab_access_token: str, veza_url: str, veza_user: str
 
     # push data
     try:
-        veza_con.push_application(provider_name, data_source_name=gitlab_app.deployment_name, application_object=gitlab_app.app, save_json=save_json)
+        response = veza_con.push_application(provider_name, data_source_name=gitlab_app.deployment_name, application_object=gitlab_app.app, save_json=save_json)
+        if response.get("warnings", None):
+            log.warning("Push succeeded with warnings:")
+            for e in response["warnings"]:
+                log.warning(e)
         log.info("Success")
     except OAAClientError as e:
         log.error(f"{e.error}: {e.message} ({e.status_code})")
         if hasattr(e, "details"):
             for d in e.details:
                 log.error(d)
+        raise e
 
 
 def main() -> None:
     """ process command line and OS environment variables to ensure everything is set, call `run` function """
+
+    logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s', level=logging.INFO)
+    log = logging.getLogger()
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--gitlab-url", default=os.getenv("GITLAB_URL"), help="GitLab URL to discover")
@@ -400,8 +408,6 @@ def main() -> None:
         log_arg_error("--gitlab-url", "GITLAB_URL")
     if not veza_url:
         log_arg_error("--veza-url", "VEZA_URL")
-    if not veza_user:
-        log_arg_error("--veza-user", "VEZA_USER")
 
     # security values can only be loaded through OS environment
     gitlab_access_token = os.getenv("GITLAB_ACCESS_TOKEN")
@@ -412,11 +418,15 @@ def main() -> None:
     if not veza_api_key:
         log_arg_error(env="VEZA_API_KEY")
 
-    if None in [gitlab_url, gitlab_access_token, veza_url, veza_user, veza_api_key]:
+    if None in [gitlab_url, gitlab_access_token, veza_url, veza_api_key]:
         log.error("Missing one or more required parameters")
         sys.exit(1)
 
-    run(gitlab_url, gitlab_access_token, veza_url, veza_user, veza_api_key, save_json=args.save_json, verbose=args.verbose)
+    try:
+        run(gitlab_url, gitlab_access_token, veza_url, veza_user, veza_api_key, save_json=args.save_json, verbose=args.verbose)
+    except Exception:
+        log.error("Exiting with error")
+        sys.exit(1)
 
 
 if __name__ == '__main__':

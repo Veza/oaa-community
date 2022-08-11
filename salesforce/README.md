@@ -6,13 +6,13 @@
 This connector uses the OAA Application template to map applications and identities to permissions.
 The following table shows how Custom Application entities correspond to Salesforce.com entities:
 
-Salesforce.com        | Generic Application  
-----------------------|----------------------
-instance              | application          
-object type           | application resource
-permissions set       | local group          
-permissions set group | local group          
-user                  | local user           
+| Salesforce.com        | Generic Application  |
+| --------------------- | -------------------- |
+| instance              | application          |
+| object type           | application resource |
+| permissions set       | local group          |
+| permissions set group | local group          |
+| user                  | local user           |
 
 ### Limitations
 This connector iterates object types and permissions sets to determine user access levels.
@@ -91,33 +91,63 @@ If an appropriate user and Permissions Set with API access enabled already exist
 
 ### Command Line
 1. Ensure `pip` is up-to-date; dependencies will fail to install unless `pip >= 21.0`
-1. With Python 3.8+, install the application requirements either into a virtual environment or globally:
-```
-pip3 install -rrequirements
-```
+2. With Python 3.8+, install the application requirements either into a virtual environment or globally:
+   ```
+   pip3 install -r requirements.txt
+   ```
 3. Set environmental variables required for Veza and Salesforce.com access:
-```
-export VEZA_API_KEY="<veza_api_key>"
-export SFDC_CLIENT_ID="<sfdc_client_id>"
-export SFDC_CLIENT_SECRET="<sfdc_client_secret>"
-export SFDC_PASSWORD="<sfdc_password>"
-```
+
+   Mac, Linux
+   ```
+   export VEZA_API_KEY="<veza_api_key>"
+   export SFDC_CLIENT_ID="<sfdc_client_id>"
+   export SFDC_CLIENT_SECRET="<sfdc_client_secret>"
+   export SFDC_PASSWORD="<sfdc_password>"
+   ```
+
+   Windows CMD
+   ```
+   set VEZA_API_KEY=<veza_api_key>
+   set SFDC_CLIENT_ID=<sfdc_client_id>
+   set SFDC_CLIENT_SECRET=<sfdc_client_secret>
+   set SFDC_PASSWORD=<sfdc_password>
+   ```
+
 4. Run the application:
-```
-./oaa_salesforce.py --veza-url <veza_url> --veza_user <veza_user> --sfdc_user <sfdc_user>
-```
+   Mac, Linux
+   ```
+   ./oaa_salesforce.py --veza-url <veza_url> --sfdc_user <sfdc_user>
+   ```
 
-Optionally, all parameters can be passed via OS environmental variables:
-```
-export VEZA_API_KEY="<veza_api_key>"
-export VEZA_URL="<veza_url>"
-export SFDC_CLIENT_ID="<sfdc_client_id>"
-export SFDC_CLIENT_SECRET="<sfdc_client_secret>"
-export SFDC_USER="<sfdc_user>"
-export SFDC_PASSWORD="<sfdc_password>"
-```
+   Windows
+   ```
+   python oaa_salesforce.py --veza-url <veza_url> --sfdc_user <sfdc_user>
+   ```
 
-After setting all environmental variables, run the application:
-```
-./oaa_salesforce.py
-```
+   Depending on how Python is instealled in the Windows environment the command may be `python3` or `py`
+
+
+   Optionally, all parameters can be passed via OS environmental variables. For example on a Mac/Linux machine:
+   ```
+   export VEZA_API_KEY="<veza_api_key>"
+   export VEZA_URL="<veza_url>"
+   export SFDC_CLIENT_ID="<sfdc_client_id>"
+   export SFDC_CLIENT_SECRET="<sfdc_client_secret>"
+   export SFDC_USER="<sfdc_user>"
+   export SFDC_PASSWORD="<sfdc_password>"
+   ./oaa_salesforce.py
+   ```
+
+### Parameters
+| CLI Parameter      | Environment Variable | Description                                                                         |
+| ------------------ | -------------------- | ----------------------------------------------------------------------------------- |
+| `--veza_url`       | `VEZA_URL`           | URL of Veza system                                                                  |
+|                    | `VEZA_API_KEY`       | API key for Veza connection                                                         |
+| `--sfdc_client_id` | `SFDC_CLIENT_ID`     | Client ID configured for Salesforce Connected App                                   |
+|                    | `SFDC_CLIENT_SECRET` | Secret key for Connected App                                                        |
+| `--sfdc_user`      | `SFDC_USER`          | Salesforce username for connection                                                  |
+|                    | `SFDC_PASSWORD`      | Salesforce user password                                                            |
+| `--filter_objects` |                      | Optional list of Salesforce object types to limit discovery too separated by spaces |
+| `--all_users`      |                      | Discover all Salesforce users, default to only `standard` users                     |
+| `--debug`          |                      | Enable verbose debug output                                                         |
+| `--save_json`      |                      | Save OAA Payload as local JSON file before upload                                   |

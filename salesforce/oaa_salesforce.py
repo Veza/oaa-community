@@ -447,7 +447,13 @@ def run(veza_api_key, veza_url, sfdc_client_id, sfdc_client_secret, sfdc_passwor
         log.error(error.message)
         raise error
 
-    salesforce_app = OAA_SFDC_LightningAPI(sfdc_client_id, sfdc_client_secret, sfdc_password, sfdc_user)
+    try:
+        salesforce_app = OAA_SFDC_LightningAPI(sfdc_client_id, sfdc_client_secret, sfdc_password, sfdc_user)
+    except HTTPError as error:
+        log.error(f"Error connecting to Salesforce: Salesforce API returned error: {error.response.status_code} for {error.response.url}")
+        log.error(error)
+        log.error("Please validate Salesforce credentials and trusted IP range")
+        raise error
 
     if objects_filter:
         salesforce_app.update_objects_filter(objects_filter)

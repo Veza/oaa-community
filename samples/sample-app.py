@@ -2,7 +2,7 @@
 """
 Copyright 2022 Veza Technologies Inc.
 
-Use of this source code is governed by a the MIT
+Use of this source code is governed by the MIT
 license that can be found in the LICENSE file or at
 https://opensource.org/licenses/MIT.
 
@@ -33,7 +33,7 @@ def main():
     veza_api_key = os.getenv('VEZA_API_KEY')
     veza_url = os.getenv('VEZA_URL')
     if None in (veza_url, veza_api_key):
-        print("Unable to local all environemnt variables")
+        print("Unable to local all environment variables")
         sys.exit(1)
 
     # Instantiates a client connection. The client will confirm the credentials and Veza URL are valid
@@ -42,7 +42,7 @@ def main():
 
     # Create an instance of the OAA CustomApplication class, modeling the application name and type
     # `name` will be displayed in the Veza UI
-    # `application_type` should be a short key reflecting the source application authroization is being modeled for
+    # `application_type` should be a short key reflecting the source application authorization is being modeled for
     # You can use the same type for multiple applications
     custom_app = CustomApplication(name="Sample App", application_type="sample")
 
@@ -95,7 +95,7 @@ def main():
     custom_app.local_users["yan"].add_permission(permission="operator", resources=[entity1, child1])
 
     # Authorization can also be created directly for an IdP identity
-    custom_app.add_idp_idententiy("user_identity@example.com")
+    custom_app.add_idp_identity("user_identity@example.com")
     # resources can also be referenced by name from the application model
     custom_app.idp_identities["user_identity@example.com"].add_permission(permission="admin", resources=[custom_app.resources['Entity1']])
 

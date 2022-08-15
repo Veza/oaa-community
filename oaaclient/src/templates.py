@@ -1,7 +1,7 @@
 """
 Copyright 2022 Veza Technologies Inc.
 
-Use of this source code is governed by a the MIT
+Use of this source code is governed by the MIT
 license that can be found in the LICENSE file or at
 https://opensource.org/licenses/MIT.
 """
@@ -191,7 +191,7 @@ class CustomApplication(Application):
         Args:
             name (str): Name of resources
             resource_type (str): Type for resource
-            descrption (str): Optional description of resources
+            description (str): Optional description of resources
 
         Returns:
             CustomResource
@@ -213,7 +213,7 @@ class CustomApplication(Application):
 
         Local users can be referenced after creation if needed through `self.local_users[identifier]`
 
-        Use `unique_id` when name is not gaurenteed to be unique. All permission, group and role assignments will be referenced by unique_id.
+        Use `unique_id` when name is not guaranteed to be unique. All permission, group and role assignments will be referenced by unique_id.
 
 
         Args:
@@ -244,7 +244,7 @@ class CustomApplication(Application):
 
         Local groups will be identified by `name` by default, if `unique_id` is provided it will be used as the identifier instead
 
-        Local groups can be referenced after creatino if needed through `self.local_groups[identifier]`
+        Local groups can be referenced after creation using `self.local_groups[identifier]`
 
         Args:
             name (str): Display name for group
@@ -295,7 +295,7 @@ class CustomApplication(Application):
 
         return self.local_roles[identifier]
 
-    def add_idp_idententiy(self, name: str) -> IdPIdentity:
+    def add_idp_identity(self, name: str) -> IdPIdentity:
         """ IdP users or groups can be authorized directly to applications and resources by associating permissions and roles with the IdP identity's principal name or email.
 
         Args:
@@ -344,7 +344,7 @@ class CustomApplication(Application):
         return
 
     def add_access(self, identity, identity_type, permission, resource=None):
-        """ Legacy method for backwards compatability, access should be added through identity (local_role, local_group, idp) """
+        """ Legacy method for backwards compatibility, access should be added through identity (local_role, local_group, idp) """
 
         if resource:
             apply_to_application = True
@@ -369,9 +369,9 @@ class CustomApplication(Application):
                 raise OAATemplateException(f"Group {identity} not found in local_groups")
             self.local_groups[identity].add_permission(permission, resources=resource_list, apply_to_application=apply_to_application)
         elif identity_type == OAAIdentityType.IdP:
-            # legacy add_access did not require IdP user to exist first, create user to backwards compatability
+            # legacy add_access did not require IdP user to exist first, create user to backwards compatibility
             if identity not in self.idp_identities:
-                self.add_idp_idententiy(identity)
+                self.add_idp_identity(identity)
             self.idp_identities[identity].add_permission(permission, resource=resource_list, apply_to_application=apply_to_application)
 
         return
@@ -463,7 +463,7 @@ class CustomResource():
         sub_resource_key = f"{self.resource_key}.{name}"
 
         if name in self.sub_resources:
-            raise Exception(f"Subresource {name} already defined")
+            raise Exception(f"Sub-resource {name} already defined")
 
         self.sub_resources[name] = CustomResource(name, resource_type, description, self.application_name, sub_resource_key, property_definitions=self.property_definitions)
 
@@ -528,6 +528,7 @@ class CustomResource():
 class Identity():
     """
     Base class for deriving all identity types. Should not be used directly
+
     Args:
         name (string): name of identity
         identity_type (OAAIdentityType): Veza Identity Type (local_user, local_group, idp)
@@ -585,7 +586,7 @@ class Identity():
                     if r.resource_key not in self.resource_permissions[permission]:
                         self.resource_permissions[permission].append(r.resource_key)
                     else:
-                        # permision to resource already associated
+                        # permission to resource already associated
                         pass
             else:
                 self.resource_permissions[permission] = [r.resource_key for r in resources]
@@ -834,7 +835,7 @@ class LocalGroup(Identity):
         self.identities = append_helper(self.identities, identity)
 
     def to_dict(self) -> dict:
-        """ Output group to disctionary for payload """
+        """ Output group to dictionary for payload """
         group = {"name": self.name,
                 "identities": self.identities,
                 "created_at": self.created_at,
@@ -965,7 +966,7 @@ class LocalRole():
         Convert role to dictionary for inclusion in JSON payload.
 
         Returns:
-            response: seralizable dictionary of role
+            response: serializable dictionary of role
 
         """
         response = {}
@@ -1021,20 +1022,20 @@ class CustomPermission():
         if permissions is None:
             return True
 
-        validated_permisions = []
+        validated_permissions = []
         if isinstance(permissions, list):
             for p in permissions:
                 if isinstance(p, OAAPermission):
-                    validated_permisions.append(p)
+                    validated_permissions.append(p)
                     continue
                 else:
                     raise OAATemplateException("Custom permissions must be OAAPermission enum")
         elif isinstance(permissions, OAAPermission):
-            validated_permisions.append(permissions)
+            validated_permissions.append(permissions)
         else:
             raise OAATemplateException("Custom permissions must be OAAPermission enum")
 
-        self.permission_type = validated_permisions
+        self.permission_type = validated_permissions
 
 
 ###############################################################################
@@ -1222,7 +1223,7 @@ class IdPProviderType(str, Enum):
     CUSTOM = "custom"
     GOOGLE_WORKSPACE = "google_workspace"
     OKTA = "okta"
-    ONE_LOGIN = "one_logn"
+    ONE_LOGIN = "one_login"
 
 
 class CustomIdPProvider():
@@ -1246,7 +1247,7 @@ class CustomIdPProvider():
         domain (CustomIdPDomain): Domain model, created with domain name at init
         users (dict): Dictionary of CustomIdPUser class instances
         groups (dict): Dictionary of CustomIdPGroup class instances
-        property_definitions (IdPPropertyDefinitions): Custom Property defintions for IdP instance
+        property_definitions (IdPPropertyDefinitions): Custom Property definitions for IdP instance
     """
 
     def __init__(self, name: str, idp_type: str, domain: str, description: str = None) -> None:
@@ -1448,7 +1449,7 @@ class CustomIdPUser():
     def add_groups(self, group_identities: list[str]) -> None:
         """ add user to group(s) by group name
 
-        Agrs:
+        Args:
             group_identities (list): list of strings for group identities to add user to
 
         """
@@ -1697,7 +1698,7 @@ class Tag():
 
 def append_helper(base, addition):
     """ helper function to simplify appending
-        handles mutliple cases:
+        handles multiple cases:
          - base is None - starts a list
          - addition is list - extends base with list
          - addition is anything else - append element to list

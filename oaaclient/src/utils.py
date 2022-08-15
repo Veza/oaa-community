@@ -1,7 +1,7 @@
 """
 Copyright 2022 Veza Technologies Inc.
 
-Use of this source code is governed by a the MIT
+Use of this source code is governed by the MIT
 license that can be found in the LICENSE file or at
 https://opensource.org/licenses/MIT.
 
@@ -23,7 +23,7 @@ def log_arg_error(log: object, arg: str = None, env: str = None) -> None:
     Args:
         log (object): logging facility object to log to
         arg (str, optional): Command line option for parameter such as `--veza-url`. Defaults to None.
-        env (str, optional): OS Environment variable for paremeter such as `VEZA_URL`. Defaults to None.
+        env (str, optional): OS Environment variable for parameter such as `VEZA_URL`. Defaults to None.
 
     Raises:
         Exception: if neither `arg` or `env` are supplied

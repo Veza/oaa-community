@@ -2,7 +2,7 @@
 """
 Copyright 2022 Veza Technologies Inc.
 
-Use of this source code is governed by a the MIT
+Use of this source code is governed by the MIT
 license that can be found in the LICENSE file or at
 https://opensource.org/licenses/MIT.
 """
@@ -501,13 +501,13 @@ def main():
     process comand line and OS environment variables, then call `run`
     """
     parser = argparse.ArgumentParser(description = "OAA Salesforce Connector")
-    parser.add_argument("--veza_url", default = os.getenv("VEZA_URL"), help = "the URL of the Veza instance")
+    parser.add_argument("--veza-url", "--veza_url", default = os.getenv("VEZA_URL"), help = "the URL of the Veza instance")
     parser.add_argument("--debug", action = "store_true", help = "set the log level to debug")
-    parser.add_argument("--save_json", action = "store_true", help = "save OAA JSON payload to file")
-    parser.add_argument("--sfdc_client_id", default = os.getenv("SFDC_CLIENT_ID"), help = "the client ID used to authenticate to salesforce.com")
-    parser.add_argument("--sfdc_user", default = os.getenv("SFDC_USER"), help = "the username with which to authenticate to salesforce.com")
-    parser.add_argument("--filter_objects", nargs="*", help="Optional list of SFDC object types to limit discovery to" )
-    parser.add_argument("--all_users", action = "store_true", help="Discover all user of all types, default is to only collect standard users")
+    parser.add_argument("--save-json", "--save_json", action = "store_true", help = "save OAA JSON payload to file")
+    parser.add_argument("--sfdc-client-id", "--sfdc_client_id", default = os.getenv("SFDC_CLIENT_ID"), help = "the client ID used to authenticate to salesforce.com")
+    parser.add_argument("--sfdc-user", "--sfdc_user", default = os.getenv("SFDC_USER"), help = "the username with which to authenticate to salesforce.com")
+    parser.add_argument("--filter-objects", "--filter_objects", nargs="*", help="Optional list of SFDC object types to limit discovery to" )
+    parser.add_argument("--all-users", "--all_users", action = "store_true", help="Discover all user of all types, default is to only collect standard users")
     args = parser.parse_args()
 
     veza_api_key = os.getenv("VEZA_API_KEY")
@@ -527,15 +527,15 @@ def main():
     if not veza_api_key:
         log_arg_error(None, "VEZA_API_KEY")
     if not veza_url:
-        log_arg_error("--veza_url", "VEZA_URL")
+        log_arg_error("--veza-url", "VEZA_URL")
     if not sfdc_client_id:
-        log_arg_error("--sfdc_client_id", "SFDC_CLIENT_ID")
+        log_arg_error("--sfdc-client_id", "SFDC_CLIENT_ID")
     if not sfdc_client_secret:
         log_arg_error(None, "SFDC_CLIENT_SECRET")
     if not sfdc_password:
         log_arg_error(None, "SFDC_PASSWORD")
     if not sfdc_user:
-        log_arg_error("--sfc_user", "SFDC_USER")
+        log_arg_error("--sfc-user", "SFDC_USER")
 
     objets_filter = args.filter_objects
     discover_all_users = args.all_users

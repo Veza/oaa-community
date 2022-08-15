@@ -116,12 +116,12 @@ If an appropriate user and Permissions Set with API access enabled already exist
 4. Run the application:
    Mac, Linux
    ```
-   ./oaa_salesforce.py --veza-url <veza_url> --sfdc_user <sfdc_user>
+   ./oaa_salesforce.py --veza-url <veza_url> --sfdc-user <sfdc_user>
    ```
 
    Windows
    ```
-   python oaa_salesforce.py --veza-url <veza_url> --sfdc_user <sfdc_user>
+   python oaa_salesforce.py --veza-url <veza_url> --sfdc-user <sfdc_user>
    ```
 
    Depending on how Python is instealled in the Windows environment the command may be `python3` or `py`
@@ -141,13 +141,13 @@ If an appropriate user and Permissions Set with API access enabled already exist
 ### Parameters
 | CLI Parameter      | Environment Variable | Description                                                                         |
 | ------------------ | -------------------- | ----------------------------------------------------------------------------------- |
-| `--veza_url`       | `VEZA_URL`           | URL of Veza system                                                                  |
+| `--veza-url`       | `VEZA_URL`           | URL of Veza system                                                                  |
 |                    | `VEZA_API_KEY`       | API key for Veza connection                                                         |
-| `--sfdc_client_id` | `SFDC_CLIENT_ID`     | Client ID configured for Salesforce Connected App                                   |
+| `--sfdc-client-id` | `SFDC_CLIENT_ID`     | Client ID configured for Salesforce Connected App                                   |
 |                    | `SFDC_CLIENT_SECRET` | Secret key for Connected App                                                        |
-| `--sfdc_user`      | `SFDC_USER`          | Salesforce username for connection                                                  |
+| `--sfdc-user`      | `SFDC_USER`          | Salesforce username for connection                                                  |
 |                    | `SFDC_PASSWORD`      | Salesforce user password                                                            |
-| `--filter_objects` |                      | Optional list of Salesforce object types to limit discovery too separated by spaces |
-| `--all_users`      |                      | Discover all Salesforce users, default to only `standard` users                     |
+| `--filter-objects` |                      | Optional list of Salesforce object types to limit discovery too separated by spaces |
+| `--all-users`      |                      | Discover all Salesforce users, default to only `standard` users                     |
 | `--debug`          |                      | Enable verbose debug output                                                         |
-| `--save_json`      |                      | Save OAA Payload as local JSON file before upload                                   |
+| `--save-json`      |                      | Save OAA Payload as local JSON file before upload                                   |

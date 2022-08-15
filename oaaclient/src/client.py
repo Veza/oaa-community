@@ -2,7 +2,7 @@
 """
 Copyright 2022 Veza Technologies Inc.
 
-Use of this source code is governed by a the MIT
+Use of this source code is governed by the MIT
 license that can be found in the LICENSE file or at
 https://opensource.org/licenses/MIT.
 """
@@ -58,7 +58,7 @@ class OAAClient():
     payloads from JSON or template apps.
 
     Args:
-        url (str): URL for Veza isntance.
+        url (str): URL for Veza instance.
         api_key (str): Veza API key.
         username (str, optional): Not used (legacy). Defaults to None.
         token (str, optional): legacy parameter name for API key. Defaults to None.
@@ -150,7 +150,7 @@ class OAAClient():
             base64_icon (str): Optional, Base64 encoded string of icon to set for Provider
 
         Returns:
-            dict: dictionary reprsenting new Provider created
+            dict: dictionary representing the created Provider
         """
         response = self.__perform_post("/api/v1/providers/custom", {"name": name, "custom_template": custom_template})
         provider = response['value']
@@ -244,7 +244,7 @@ class OAAClient():
         return datasource['value']
 
     def create_datasource(self, name, provider_id):
-        """ legacy function for backwards compatability """
+        """ legacy function for backwards compatibility """
         return self.create_data_source(name, provider_id)
 
     def delete_data_source(self, data_source_id: str, provider_id: str) -> dict:
@@ -321,7 +321,7 @@ class OAAClient():
     def push_application(self, provider_name: str, data_source_name: str, application_object: Union[CustomApplication, CustomIdPProvider], save_json=False) -> dict:
         """Push an OAA Application Object (such as CustomApplication)
 
-        Extract the OAA JSON payload from the supplied OAA class (e.g. CustomApplication, CustomIdPProvder) and push to
+        Extract the OAA JSON payload from the supplied OAA class (e.g. CustomApplication, CustomIdPProvider) and push to
         the supplied Data Source.
 
         The Provider must be a valid Provider (created ahead of time). A new data source will be created
@@ -361,7 +361,7 @@ class OAAClient():
             api_path (str): API path relative to Veza URL (example `/api/v1/providers`).
 
         Raises:
-            OAAClientError: If API operation does not complete succesfully
+            OAAClientError: If API operation does not complete successfully
 
         Returns:
             Union[list, dict]: Returns list or dict based on API destination
@@ -399,7 +399,7 @@ class OAAClient():
             data (dict): dictionary object included as JSON in body of POST operation
 
         Raises:
-            OAAClientError: If API operation does not complete succesfully
+            OAAClientError: If API operation does not complete successfully
 
         Returns:
             dict: API response as dictionary

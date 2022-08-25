@@ -370,7 +370,8 @@ GENERATED_APP_ID_MAPPINGS_PAYLOAD = """
         "MetadataDelete",
         "NonData"
       ],
-      "apply_to_sub_resources": false
+      "apply_to_sub_resources": false,
+      "resource_types": []
     },
     {
       "name": "Admin",
@@ -381,7 +382,8 @@ GENERATED_APP_ID_MAPPINGS_PAYLOAD = """
         "MetadataWrite",
         "NonData"
       ],
-      "apply_to_sub_resources": true
+      "apply_to_sub_resources": true,
+      "resource_types": []
     },
     {
       "name": "Manage",
@@ -392,7 +394,8 @@ GENERATED_APP_ID_MAPPINGS_PAYLOAD = """
         "MetadataWrite",
         "NonData"
       ],
-      "apply_to_sub_resources": false
+      "apply_to_sub_resources": false,
+      "resource_types": []
     },
     {
       "name": "View",
@@ -400,7 +403,8 @@ GENERATED_APP_ID_MAPPINGS_PAYLOAD = """
         "DataRead",
         "MetadataRead"
       ],
-      "apply_to_sub_resources": false
+      "apply_to_sub_resources": false,
+      "resource_types": []
     }
   ],
   "identity_to_permissions": [

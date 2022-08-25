@@ -441,7 +441,8 @@ CUSTOM_PROPERTIES_PAYLOAD = """
       "permission_type": [
         "DataWrite"
       ],
-      "apply_to_sub_resources": false
+      "apply_to_sub_resources": false,
+      "resource_types": []
     }
   ],
   "identity_to_permissions": [

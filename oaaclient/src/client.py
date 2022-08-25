@@ -66,6 +66,7 @@ class OAAClient():
     Attributes:
         url (str): URL of the Veza instance to connect to
         api_key (str): Veza API key
+        enable_compression (bool): Enable/disable compression of the OAA payload during push, defaults to enabled (True)
 
     Raises:
         OAAClientError: For errors connecting to API and if API returns errors
@@ -96,7 +97,9 @@ class OAAClient():
         if not self.api_key:
             raise OAAClientError("MISSING_AUTH", "API key cannot be None")
 
-        self.enable_compression = False
+        # enable payload compression by default, connection object property can be set to False to disable
+        self.enable_compression = True
+
         # test connection to validate host and credentials
         providers = self.get_provider_list()
 
@@ -275,8 +278,8 @@ class OAAClient():
         Args:
             provider_name (str): Name of existing Provider
             data_source_name (str): Name for Data Source, will be created if doesn't exist.
-            metadata (dict): Dictionary to be converted to JSON for OAA payload.
-            save_json (bool, optional): Save the JSON payload to a local file before push. Defaults to False.
+            metadata (dict): Dictionary of OAA payload to push.
+            save_json (bool, optional): Save the OAA JSON payload to a local file before push. Defaults to False.
 
         Raises:
             OAAClientError: If any API call returns an error including errors processing the OAA payload.
@@ -301,19 +304,24 @@ class OAAClient():
 
         if self.enable_compression:
             log.debug("Compressing payload")
-            payload_bytes = json.dumps(metadata).encode()
-            payload_size = sys.getsizeof(payload_bytes)
-            compressed_bytes = gzip.compress(payload_bytes)
-            del payload_bytes
+            metadata_bytes = json.dumps(metadata).encode()
+            metadata_size = sys.getsizeof(metadata_bytes)
+            compressed_bytes = gzip.compress(metadata_bytes)
+            del metadata_bytes
 
             encoded = base64.b64encode(compressed_bytes).decode()
             encoded_size = sys.getsizeof(encoded)
             del compressed_bytes
-            log.debug(f"Compression complete, payload size: {payload_size}, encoded compressed: {encoded_size}")
+            log.debug(f"Compression complete, payload size in bytes: {metadata_size:,}, encoded compressed: {encoded_size:,}")
             payload = {"id": provider["id"], "data_source_id": data_source["id"], "json_data": encoded, "compression_type": "GZIP"}
         else:
             payload = {"id": provider["id"], "data_source_id": data_source["id"], "json_data": json.dumps(metadata)}
 
+        payload_size = sys.getsizeof(payload["json_data"])
+        if payload_size > 100_000_000:
+            raise OAAClientError("OVERSIZE", message=f"Payload size exceeds maximum size of 100MB: {payload_size:,} bytes, compression enabled: {self.enable_compression}")
+
+        log.debug(f"Final payload size: {payload_size:,} bytes")
         result = self.__perform_post(f"/api/v1/providers/custom/{provider['id']}/datasources/{data_source['id']}:push", payload)
 
         return result

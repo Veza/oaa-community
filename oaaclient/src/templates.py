@@ -158,12 +158,16 @@ class CustomApplication(Application):
 
         return self.custom_permissions[custom_permission.name]
 
-    def add_custom_permission(self, name: str, permissions: list[OAAPermission], apply_to_sub_resources: bool = False) -> CustomPermission:
-        """ Create a new custom permission with the given list of canonical permissions
+    def add_custom_permission(self, name: str, permissions: list[OAAPermission], apply_to_sub_resources: bool = False, resource_types: list[str] = None) -> CustomPermission:
+        """Create a new custom permission.
+
+        Creates a new `CustomPermission` object for the application that can be used to authorize identities to the application, resources/sub-resource or as part of a role.
 
         Args:
             name (str): Name of the permission
             permissions (list): List of OAAPermission enums
+            apply_to_sub_resouces (bool, Optional): If true, when permission is applied to the application or resource, identity also has permission to all children of application/resource. Defaults to False.
+            resource_types  (list, Option): List of resource types as strings that the permission relates to. Defaults to empty list.
 
         Returns:
             CustomPermission
@@ -178,7 +182,7 @@ class CustomApplication(Application):
         elif not all(isinstance(p, OAAPermission) for p in permissions):
             raise OAATemplateException("permission must be of type OAAPermission")
 
-        self.custom_permissions[name] = CustomPermission(name, permissions, apply_to_sub_resources)
+        self.custom_permissions[name] = CustomPermission(name, permissions, apply_to_sub_resources, resource_types)
 
         return self.custom_permissions[name]
 
@@ -875,11 +879,12 @@ class IdPIdentity(Identity):
 
 
 class LocalRole():
-    """
-    Represent a Custom Application Local Role. Local Roles are a collection of permissions.
-    Roles can be used to associate a local user, group or IdP identity to a resource.
+    """Represent a Custom Application Local Role.
 
-    Permissions can either be assigned at creation and/or added later.
+    Local Roles are a collection of permissions (as `CustomPerssion`). Roles can be used to associate a local user, group or IdP identity to an application, resource or sub-resource.
+
+    Permissions can either be assigned at creation and/or added later. If the `CustomPermission` definition includes resource types in the `resource_types` list the permission will
+    only be assigned to resources/sub-resources that match that type as part of an assignment.
 
     Args:
         name (string): name of local role
@@ -888,6 +893,7 @@ class LocalRole():
 
      Attributes:
         name (string): name of local role
+        unique_id (string): Unique identifier for role for identification by ID
         permissions (list): list of custom permission names (strings) to associate with the role
         tags (list): list of Tags instances
 
@@ -981,25 +987,37 @@ class LocalRole():
 
 
 class CustomPermission():
-    """
-    CustomPermission class for defining `CustomApplication` permissions. Custom permissions represent the named permissions for the application in its terms (e.g. "Admin").
-    CustomPermission includes list of Veza Canonical permissions.
+    """CustomPermission class for defining `CustomApplication` permissions.
+
+    Custom permissions represent the named permissions for the application in its terms (e.g. "Admin") and define the
+    Veza canonical mapping (e.g. DataRead, MetadataRead)
+
+    A permission can either be applied directly to an application or resource or assigned as part of a role.
+
+    Optionally, when permissions are used as part of a role, if the `resource_types` list is populated the permission
+    will only be applied to resources who's type is in the `resource_types` list when the role is applied to a resource.
 
     Args:
         name (str): Display name for permission
         permissions (list): List of OAAPermission enums that represent the canonical permissions
-        apply_to_sub_resources (bool): If true, when permission is applied to the application or resource, identity also has permission to all children of application/resource (default `false`)
+        apply_to_sub_resources (bool, Optional): If true, when permission is applied to the application or resource, identity also has permission to all children of application/resource. Defaults to `False`.
+        resource_types(list, Optional): List of resource types as strings that the permission relates to. Defaults to empty list.
 
     Attributes:
         name (str): Display name for permission
         permissions (list): List of OAAPermission enums that represent the canonical permissions
-        apply_to_sub_resources (bool): If true, when permission is applied to the application or resource, identity also has permission to all children of application/resource (default `false`)
+        apply_to_sub_resources (bool): If true, when permission is applied to the application or resource, identity also has permission to all children of application/resource.
+        resource_types (list): List of resource types as strings that the permission relates to.
     """
 
-    def __init__(self, name: str, permissions: list[OAAPermission], apply_to_sub_resources: bool = False) -> None:
+    def __init__(self, name: str, permissions: list[OAAPermission], apply_to_sub_resources: bool = False, resource_types: list = None) -> None:
         self.name = name
         self.permission_type = []
         self.apply_to_sub_resources = apply_to_sub_resources
+        if resource_types:
+            self.resource_types = resource_types
+        else:
+            self.resource_types = []
         self.__validate_permissions(permissions)
 
 
@@ -1007,11 +1025,24 @@ class CustomPermission():
         """ returns dictionary representation for payload """
         return {"name": self.name,
                 "permission_type": self.permission_type,
-                "apply_to_sub_resources": self.apply_to_sub_resources
+                "apply_to_sub_resources": self.apply_to_sub_resources,
+                "resource_types": self.resource_types
                 }
 
+    def add_resource_type(self, resource_type: str) -> None:
+        """Add a resource type to the resource_types list.
+
+        Extends the list of resource types permission applies to when used in role assignment.
+
+        Args:
+            resource_type (str): The resource type string value
+        """
+
+        if resource_type not in self.resource_types:
+            self.resource_types.append(resource_type)
+
     def __validate_permissions(self, permissions: list[OAAPermission]) -> None:
-        """ validates that all entities in list are OAAPermission type, raises exception if not
+        """Validate permissions are OAAPermission type
 
         Args:
             permissions (list): List of entities to validate are of type OAAPermission
@@ -1680,10 +1711,10 @@ class Tag():
         self.key = str(key)
         self.value = str(value)
 
-        if not re.match(r"^[a-zA-Z0-9_]+$", self.key):
-            raise OAATemplateException(f"Invalid characters in tag key {self.key}, may only contain letters, numbers and _ (underscore)")
-        if self.value != "" and not re.match(r"^[a-zA-Z0-9_,\.@]+$", self.value):
-            raise OAATemplateException(f"Invalid characters in tag value {self.value}, may only contain letters, numbers and the special characters @,._ ")
+        if not re.match(r"^[\w\d\s_]+$", self.key):
+            raise OAATemplateException(f"Invalid characters in tag key {self.key}: may only contain letters, numbers, whitespace and _ (underscore)")
+        if self.value != "" and not re.match(r"^[\w\d\s_,@\.-]+$", self.value):
+            raise OAATemplateException(f"Invalid characters in tag value {self.value}: may only contain letters, numbers, whitespace and the special characters @,._-")
 
     def __eq__(self, o):
         if self.key == o.key and self.value == o.value:

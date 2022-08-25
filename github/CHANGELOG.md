@@ -1,5 +1,8 @@
 # GitHub Connector Change Log
 
+## 2022/8/24
+* Fix for GitHub teams discovery
+
 ## 2022/7/1
 * Set GitHub provider icon to GitHub mark logo
 

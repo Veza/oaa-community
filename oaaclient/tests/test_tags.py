@@ -19,9 +19,9 @@ def test_tag_init():
 
 def test_tag_characters():
 
-    good_tag = Tag("letter123_", "letter.123@something.com,characters456@blah.com")
-    assert good_tag.key == "letter123_"
-    assert good_tag.value == "letter.123@something.com,characters456@blah.com"
+    good_tag = Tag("lettér 123_", "letter.123@something.com,characters456@blah.com and space")
+    assert good_tag.key == "lettér 123_"
+    assert good_tag.value == "letter.123@something.com,characters456@blah.com and space"
 
     with pytest.raises(OAATemplateException) as e:
         Tag("illegal:value!")

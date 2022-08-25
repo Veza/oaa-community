@@ -48,6 +48,11 @@ def generate_app():
                                       ]
                               )
 
+    app.add_custom_permission("Manage_Thing", [OAAPermission.DataRead,
+                                               OAAPermission.DataWrite,
+                                              ],
+                              resource_types=["thing"])
+
     # define one property of every type
     app.property_definitions.define_local_user_property("is_guest", OAAPropertyType.BOOLEAN)
     app.property_definitions.define_local_user_property("user_id", OAAPropertyType.NUMBER)
@@ -96,7 +101,7 @@ def generate_app():
     app.property_definitions.define_local_role_property("role_id", OAAPropertyType.NUMBER)
     app.property_definitions.define_local_role_property("custom", OAAPropertyType.BOOLEAN)
 
-    role1 = app.add_local_role("role1", ["all", "Admin"])
+    role1 = app.add_local_role("role1", ["all", "Admin", "Manage_Thing"])
     role1.set_property("role_id", 1)
     role1.set_property("custom", False)
 
@@ -117,6 +122,7 @@ def generate_app():
     thing1.set_property("hair_color", "blue")
     thing1.set_property("peers", ["thing2", "thing3"])
     thing1.set_property("publish_date", "1959-03-12T00:00:00.000Z")
+    thing1.add_tag("A tag1", value="This is a value @,-_.")
 
     thing2 = app.add_resource("thing2", resource_type="thing")
     thing2.set_property("private", False)
@@ -312,7 +318,8 @@ GENERATED_APP_PAYLOAD = """
           "name": "role1",
           "permissions": [
             "all",
-            "Admin"
+            "Admin",
+            "Manage_Thing"
           ],
           "tags": [],
           "custom_properties": {
@@ -349,7 +356,13 @@ GENERATED_APP_PAYLOAD = """
               "thing3"
             ],
             "publish_date": "1959-03-12T00:00:00.000Z"
-          }
+          },
+          "tags": [
+            {
+              "key": "A tag1",
+              "value": "This is a value @,-_."
+            }
+          ]
         },
         {
           "name": "thing2",
@@ -394,7 +407,8 @@ GENERATED_APP_PAYLOAD = """
         "MetadataDelete",
         "NonData"
       ],
-      "apply_to_sub_resources": false
+      "apply_to_sub_resources": false,
+      "resource_types": []
     },
     {
       "name": "Admin",
@@ -405,7 +419,8 @@ GENERATED_APP_PAYLOAD = """
         "MetadataWrite",
         "NonData"
       ],
-      "apply_to_sub_resources": true
+      "apply_to_sub_resources": true,
+      "resource_types": []
     },
     {
       "name": "Manage",
@@ -416,7 +431,8 @@ GENERATED_APP_PAYLOAD = """
         "MetadataWrite",
         "NonData"
       ],
-      "apply_to_sub_resources": false
+      "apply_to_sub_resources": false,
+      "resource_types": []
     },
     {
       "name": "View",
@@ -424,7 +440,17 @@ GENERATED_APP_PAYLOAD = """
         "DataRead",
         "MetadataRead"
       ],
-      "apply_to_sub_resources": false
+      "apply_to_sub_resources": false,
+      "resource_types": []
+    },
+    {
+      "name": "Manage_Thing",
+      "permission_type": [
+        "DataRead",
+        "DataWrite"
+      ],
+      "apply_to_sub_resources": false,
+      "resource_types": ["thing"]
     }
   ],
   "identity_to_permissions": [

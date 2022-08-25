@@ -9,9 +9,12 @@ https://opensource.org/licenses/MIT.
 from requests.exceptions import JSONDecodeError as RequestsJSONDecodeError
 from requests.models import Response
 from unittest.mock import MagicMock, patch
+import base64
 import json
+import logging
 import os
 import pytest
+import sys
 import uuid
 
 from oaaclient.client import OAAClient, OAAClientError
@@ -352,3 +355,78 @@ def test_api_post_delete_error(mock_requests):
     assert e.value.error == "ERROR"
     assert "Error Reason" in e.value.message
     assert e.value.status_code == 500
+
+
+@patch('oaaclient.client.requests')
+@patch.object(OAAClient, "get_provider", return_value={"id": "123"})
+@patch.object(OAAClient, "get_data_source", return_value={"id": "123"})
+def test_large_payload(mock_requests, mock_get_provider, mock_get_data_source):
+    """Test large payload exception
+
+    Assert that a payload that would be larger than 100MB will throw an exception
+
+    """
+    test_api_key = "1234"
+    url = "https://noreply.vezacloud.com"
+
+    mock_response = Response()
+    mock_response.status_code = 200
+    mock_response._content = b"""{"id": "123"}"""
+    mock_response.url = url
+
+    mock_requests.get.return_value = mock_response
+    mock_requests.post.return_value = mock_response
+
+    veza_con = OAAClient(url=url, api_key=test_api_key)
+
+    # disable compression to make it easier to create a large payload
+    veza_con.enable_compression = False
+
+    big = "=" * 100_000_001
+    payload = {"data": big}
+    with pytest.raises(OAAClientError) as e:
+        veza_con.push_metadata("provider_name", "data_source_name", metadata=payload, save_json=False)
+
+    assert e.value.error == "OVERSIZE"
+    assert "Payload size exceeds maximum size of 100MB" in e.value.message
+
+
+@patch('oaaclient.client.requests')
+@patch.object(OAAClient, "get_provider", return_value={"id": "123"})
+@patch.object(OAAClient, "get_data_source", return_value={"id": "123"})
+def test_compression(mock_requests, mock_get_provider, mock_get_data_source):
+    """Test large payload exception
+
+    Assert that a payload that would be larger than 100MB will throw an exception
+
+    """
+    test_api_key = "1234"
+    url = "https://noreply.vezacloud.com"
+
+    mock_response = Response()
+    mock_response.status_code = 200
+    mock_response._content = b"""{"id": "123"}"""
+    mock_response.url = url
+
+    mock_requests.get.return_value = mock_response
+    mock_requests.post.return_value = mock_response
+
+    veza_con = OAAClient(url=url, api_key=test_api_key)
+    veza_con.enable_compression = True
+
+    app = generate_app()
+
+    with patch.object(veza_con, "_OAAClient__perform_post") as post_mock:
+        veza_con.push_application("provider_name", "data_source_name", application_object=app, save_json=False)
+
+    assert post_mock.called
+    call = post_mock.mock_calls[0]
+
+    # get the payload that was posted
+    payload = call.args[1]
+    # assert compression_type is set in the payload correctly
+    assert payload['compression_type'] == "GZIP"
+    # assert that the payload is base64 encoded by trying to decode
+    assert base64.b64decode(payload['json_data'])
+
+

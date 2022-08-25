@@ -1,5 +1,14 @@
 # OAA Client Change Log
 
+## 2022/08/16
+
+* Payload compression is now enabled by default. Added more detailed logging and exception when prepared payload size will exceed 100MB.
+* Added support for setting resource type list on `CustomPermission`. When permission is part of a role the permission will only be used when the role is applied if resource type is in this list. The resource type list can be specified when the permissions is created:
+  ```
+  CustomApplication.add_custom_permission(self, name: str, permissions: list[OAAPermission], apply_to_sub_resources: bool = False, resource_types: list = None)
+  ```
+* Update the tag and tag validation regex
+
 ## 2022/08/15
 
 * Update required requests package minimum version to `2.27`

@@ -360,52 +360,17 @@ class OAAGitHub():
 
         log.debug(f"Discovering org teams and team members for {self.org_name}")
 
-        # first discover list of teams, doing a combined teams, since number of teams and members/team is unpredictable its
-        # easier to do this than paginate on multiple axises
+        # query one team at a time `teams(first: 1...` for it's members and child teams, create the OAA group for each team as its discovered
+        # increments through all teams in GitHub's order
         query = """
-                query ($org_name: String!, $first: Int, $after: String) {
+                query ($org_name: String!, $first: Int, $team_after: String, $members_after: String, $children_after: String) {
                   organization(login: $org_name) {
-                    teams(first: $first, after: $after) {
+                    teams(first: 1, after: $team_after) {
                       edges {
                         node {
                           name
                           id
                           slug
-                        }
-                      }
-                      pageInfo {
-                        endCursor
-                        hasNextPage
-                      }
-                    }
-                  }
-                }
-                """
-
-        variables = {"org_name": self.org_name, "first": 100, "after": None}
-        team_list = []
-        while True:
-            result = gh_graph_run(query,auth_token=self.access_token, variables=variables)
-            for edge in result["data"]["organization"]["teams"]["edges"]:
-                node = edge['node']
-                team_list.append(node)
-                team_name = node['name']
-                self.app.add_local_group(team_name)
-
-            if result["data"]["organization"]["teams"]["pageInfo"]["hasNextPage"]:
-                variables["after"] = result["data"]["organization"]["teams"]["pageInfo"]["endCursor"]
-            else:
-                break
-
-        # now for each team query the team members and child-teams
-
-        query = """
-                query ($org_name: String!, $team_slug: String!, $first: Int, $members_after: String, $children_after: String) {
-                  organization(login: $org_name) {
-                    teams(first: 1, query: $team_slug) {
-                      edges {
-                        node {
-                          name
                           members(membership: IMMEDIATE, first: $first, after: $members_after) {
                             nodes {
                               id
@@ -430,45 +395,69 @@ class OAAGitHub():
                           }
                         }
                       }
+                    pageInfo {
+                        endCursor
+                        hasNextPage
+                        }
                     }
                   }
                 }
                 """
-        variables = {"org_name": self.org_name, "first": 100, "members_after": None, "children_after": None}
+        variables = {"org_name": self.org_name, "first": 100, "team_after": None, "members_after": None, "children_after": None}
 
-        for team in team_list:
-            variables["team_slug"] = team["slug"]
-            log.debug(f"Discovering team memberships and child teams for {team['slug']} in {self.org_name}")
+        team_after = None
+        while True:
+            variables["team_after"] = team_after
+            result = gh_graph_run(query,auth_token=self.access_token, variables=variables)
+            team = result["data"]["organization"]["teams"]["edges"][0]["node"]
+            team_name = team["name"]
+            team_slug = team["slug"]
+
+            log.debug(f"Creating group and discovering memberships and child teams for {team_name} in {self.org_name}")
+            if team_name not in self.app.local_groups:
+                self.app.add_local_group(team_name)
+
             while True:
-                result = gh_graph_run(query,auth_token=self.access_token, variables=variables)
+                # add members and children teams
                 if not result["data"]["organization"]["teams"]["edges"]:
-                    # no members for team, continue
-                    continue
+                    # no members for team, break
+                    break
                 elif len(result["data"]["organization"]["teams"]["edges"]) != 1:
-                    # this should never happen but we got more than one team result matching by slug
+                    # parent query should remained locked to only one team per response
                     raise Exception(f"GitHub query for team membership returned more than one team. team: {team['slug']}, org {self.org_name}")
 
                 node = result["data"]["organization"]["teams"]["edges"][0]["node"]
                 if node["name"] != team["name"]:
-                    raise Exception(f"Recieved result for team membership data for wrong team, expected {team['name']}, recieved {node['name']}, org {self.org_name}")
+                    raise Exception(f"Received result for team membership data for wrong team, expected {team['name']}, recieved {node['name']}, org {self.org_name}")
 
                 # assign child team groups to current team
                 for child_team in node["childTeams"]["nodes"]:
                     # add the child team group as a member of the parent
+                    if child_team["name"] not in self.app.local_groups:
+                        self.app.add_local_group(child_team["name"])
                     self.app.local_groups[child_team["name"]].add_group(team["name"])
+
                 variables["children_after"] = node["childTeams"]["pageInfo"]["endCursor"]
 
                 # assign all members that are directly in the group
                 for member in node["members"]["nodes"]:
                     member_login = member["login"]
-                    log.debug(f"Adding user to team: login: {member_login}, team: {team['name']}")
                     self.app.local_users[member_login].add_group(team["name"])
                 variables["members_after"] = node["members"]["pageInfo"]["endCursor"]
 
                 if node["members"]["pageInfo"]["hasNextPage"] or node["childTeams"]["pageInfo"]["hasNextPage"]:
-                    continue
+                    # more users or child teams to discover, re-run the query with updated cursors
+                    result = gh_graph_run(query,auth_token=self.access_token, variables=variables)
                 else:
+                    # no more team members or child groups to discover
                     break
+
+            # find next team or break
+            if result["data"]["organization"]["teams"]["pageInfo"]["hasNextPage"]:
+                team_after = result["data"]["organization"]["teams"]["pageInfo"]["endCursor"]
+            else:
+                # no more teams
+                break
 
         return
 
@@ -780,13 +769,13 @@ def run(org_name, app_id, veza_url, oaa_user, veza_api_key, key_file=None, base6
             log.warning("Push succeeded with warnings:")
             for e in response["warnings"]:
                 log.warning(e)
+        log.info("Success")
     except OAAClientError as e:
         log.error(f"{e.error}: {e.message} ({e.status_code})")
         if hasattr(e, "details"):
             for d in e.details:
                 log.error(d)
         sys.exit(1)
-    log.info("Success")
 
 
 ###########################################################
@@ -836,4 +825,8 @@ def main():
 
 
 if __name__ == '__main__':
+    # replace the log with the root logger if running as main
+    log = logging.getLogger()
+    logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s', level=logging.INFO)
+
     main()

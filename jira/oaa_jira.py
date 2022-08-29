@@ -13,10 +13,14 @@ from requests.auth import HTTPBasicAuth
 from requests.exceptions import HTTPError
 import argparse
 import json
+import logging
 import os
 import re
 import requests
 import sys
+
+logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s', level=logging.INFO)
+log = logging.getLogger(__name__)
 
 # dictionary that will track permissions to roles since they come from two very different API calls, in the future OAA will handle this
 jira_role_permissions = {}
@@ -29,24 +33,24 @@ def push_to_veza(veza_con, oaa_app, save_json=False):
   provider = veza_con.get_provider(provider_name)
 
   if provider:
-    print("-- Found existing provider")
+    log.info("Found existing provider")
   else:
-    print(f"++ Creating Provider {provider_name}")
+    log.info(f"creating Provider {provider_name}")
     provider = veza_con.create_provider(provider_name, "application")
-    print(f"-- Provider: {provider['name']} ({provider['id']})")
+    log.info(f"Provider: {provider['name']} ({provider['id']})")
 
   # push the data
   try:
-    print(f"Pushing app {oaa_app.name}")
+    log.info(f"Pushing app {oaa_app.name}")
     veza_con.push_application(
       provider_name, data_source_name=f"jira-veza", application_object=oaa_app, save_json=save_json)
+    log.info(f"Push complete")
   except OAAClientError as e:
-    print(f"-- Error: {e.error}: {e.message} ({e.status_code})", file=sys.stderr)
+    log.error(f"{e.error}: {e.message} ({e.status_code})")
     if hasattr(e, "details"):
       for d in e.details:
-        print(json.dumps(d, indent=2))
+        log.error(json.dumps(d, indent=2))
 
-  print(f"Push complete")
   return
 
 class JiraAPI():
@@ -71,7 +75,6 @@ class JiraAPI():
 
     result = []
     while True:
-      print(f"Making request {api_path} - {parameters}")
       response = requests.get(api_path, auth=HTTPBasicAuth(
         self.username, self.token), params=parameters)
 
@@ -202,7 +205,6 @@ def load_groups(jira_con, oaa_app):
   for group in groups:
     group_name = group['name']
     if not group_name in oaa_app.local_groups:
-      # print(f"[Debug]\tcreating group {group_name=}")
       oaa_app.add_local_group(group_name)
 
     try:
@@ -210,7 +212,7 @@ def load_groups(jira_con, oaa_app):
         "group/member", parameters={"groupname": group_name, "includeInactiveUsers": True})
     except HTTPError as e:
       if e.response.status_code == 404:
-        print(f"Issue finding group {group_name}, 404", file=sys.stderr)
+        log.warning(f"Issue finding group {group_name}, 404")
         continue
       raise e
 
@@ -243,7 +245,7 @@ def load_projects(jira_con, oaa_app):
     project_key         = project.get("key")
     project_name        = project.get("name")
 
-    print(f"[Info]\tLoading project {project_name}")
+    log.info(f"Loading project {project_name}")
 
     if project_name not in oaa_app.resources:
       oaa_app.add_resource(name=project_name, resource_type="project", description=project_description)
@@ -258,7 +260,7 @@ def load_projects(jira_con, oaa_app):
 def process_project(jira_con, oaa_app, project, project_roles, project_permission_scheme):
   project_id    = project.get("id")
   project_name  = project.get("name")
-  print(f"[Info]\tProcessing permission scheme for project: {project_name}")
+  log.info(f"Processing permission scheme for project: {project_name}")
 
   # print(f"[Debug]\tProject {project['isPrivate']=}")
   # build a dict of {project_id: {details}} to aggregate projectRole permissions
@@ -286,7 +288,6 @@ def process_project(jira_con, oaa_app, project, project_roles, project_permissio
         roles_to_permissions.get(role_id).get("permissions").append(permission_name)
 
     elif permission_holder_type == "group":
-      # print(f"[Debug]\t group holder {permission=}")
       group_name = permission_holder.get("group").get("name")
 
       if group_name not in groups_to_permissions:
@@ -303,7 +304,7 @@ def process_project(jira_con, oaa_app, project, project_roles, project_permissio
       pass
 
     else:
-      raise Exception(f"Unknown permission holder type {permission_holder_type} for permission {permission_name} in project {project.get('name')}")
+      log.warning(f"Unknown permission holder type {permission_holder_type} for permission {permission_name} in project {project.get('name')}")
 
   # iterate the groups_to_permissions dict and add authorization to the groups
   for group in groups_to_permissions:
@@ -315,7 +316,7 @@ def process_project(jira_con, oaa_app, project, project_roles, project_permissio
 
     for permission in groups_to_permissions[group].get("permissions"):
         if permission not in oaa_app.custom_permissions:
-            print(f"[Warn]\tCreating permission on the fly {permission}")
+            log.info(f"Creating permission on the fly {permission}")
             oaa_app.add_custom_permission(permission, parse_permissions(permission))
 
     # create a local role (project_id-group_name)
@@ -404,7 +405,7 @@ def parse_permissions(name):
   elif "work_on_issues" in name:
     permissions = [OAAPermission.MetadataWrite]
   else:
-    print(f"[Warn]\tUnable to match canonical for permission {name}")
+    log.warning(f"Unable to match canonical for permission {name}")
     permissions = [OAAPermission.NonData]
 
   return permissions
@@ -416,19 +417,14 @@ def discover(jira_con, oaa_app):
   load_groups(jira_con, oaa_app)
   load_projects(jira_con, oaa_app)
 
-  # output discovered projects to console; uncomment for debugging
-  # pprint(oaa_app.resources)
-
-  # output discovered payload to console; uncomment for debugging
-  # pprint(oaa_app.get_payload())
 
 def log_arg_error(arg=None, env=None):
   if arg and env:
-    print(f"Unable to load required paramter, must supply {arg} or set OS environment variable {env}", file=sys.stderr)
+    log.error(f"Unable to load required paramter, must supply {arg} or set OS environment variable {env}")
   elif arg and not env:
-    print(f"Unable to load required paramter, must supply {arg}", file=sys.stderr)
+    log.error(f"Unable to load required paramter, must supply {arg}")
   elif env:
-    print(f"Unable to load required paramter, must set OS environment variable {env}", file=sys.stderr)
+    log.error(f"Unable to load required paramter, must set OS environment variable {env}")
   else:
     raise Exception("Must provide arg or env to include in error message")
   return
@@ -439,8 +435,12 @@ def main():
   parser.add_argument("--jira_url", default=os.getenv("JIRA_URL"), help="URL for Atlassian instance. Example: https://<jira_domain>.atlassian.net")
   parser.add_argument("--jira_user", default=os.getenv("JIRA_USER"), help = "the user with which to connect to the Jira Cloud instance")
   parser.add_argument("--save_json", action="store_true", help="Save OAA JSON payload to file")
+  parser.add_argument("--debug", action="store_true", help="Enable additional verbose debug logging")
 
   args = parser.parse_args()
+
+  if args.debug or os.getenv("OAA_DEBUG"):
+    log.setLevel(logging.DEBUG)
 
   veza_url = args.veza_url
   jira_url = args.jira_url
@@ -462,7 +462,7 @@ def main():
       log_arg_error(env="JIRA_TOKEN")
 
   if None in [veza_url, veza_api_key, jira_url, jira_user, jira_token]:
-      print("Missing one or more required parameters", file=sys.stderr)
+      log.error("Missing one or more required parameters")
       sys.exit(1)
 
   jira_con = JiraAPI(url=jira_url, username=jira_user, token=jira_token)
@@ -475,11 +475,14 @@ def main():
     test_call = jira_con.api_get("/permissions")
   except HTTPError as e:
     if e.response.status_code == 401:
-      print(f"User {jira_user} is not logged in properly or does not have admin permissions to instance {args.jira_url}", file=sys.stderr)
+      log.error(f"User {jira_user} is not logged in properly or does not have admin permissions to instance {args.jira_url}")
     sys.exit(1)
 
   discover(jira_con, oaa_app)
   push_to_veza(veza_con, oaa_app, args.save_json)
 
 if __name__ == "__main__":
+  # replace the log with the root logger if running as main
+  log = logging.getLogger()
+  logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s', level=logging.INFO)
   main()

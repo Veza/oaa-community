@@ -1,4 +1,7 @@
 """
+
+Classes for constructing an OAA JSON payload (Custom "Application" or "IdP").
+
 Copyright 2022 Veza Technologies Inc.
 
 Use of this source code is governed by the MIT
@@ -8,13 +11,13 @@ https://opensource.org/licenses/MIT.
 
 from __future__ import annotations
 from enum import Enum
-from typing import Optional
+from typing import Optional, List
 import json
 import re
 
 
 class OAATemplateException(Exception):
-    """ General exception used for violations of the template schema """
+    """ General exception used for violations of the template schema. """
 
     def __init__(self, message):
         self.message = message
@@ -22,7 +25,10 @@ class OAATemplateException(Exception):
 
 
 class OAAPermission(str, Enum):
-    """ Canonical permissions support by Veza Authorization Framework """
+    """ Canonical permissions used by Veza Authorization Framework.
+
+    Used to describe the raw data or metadata permissions granted by `CustomPermission`
+    """
     DataRead = "DataRead"
     DataWrite = "DataWrite"
     DataCreate = "DataCreate"
@@ -35,7 +41,7 @@ class OAAPermission(str, Enum):
 
 
 class OAAIdentityType(str, Enum):
-    """ types of identities for permission mapping """
+    """ Types of identities for permission mapping. """
     LocalUser = "local_user"
     LocalGroup = "local_group"
     LocalRole = "local_role"
@@ -43,6 +49,7 @@ class OAAIdentityType(str, Enum):
 
 
 class Provider():
+    """Base class for CustomProvider. """
     def __init__(self, name, custom_template):
         self.name = name
         self.custom_template = custom_template
@@ -52,6 +59,8 @@ class Provider():
 
 
 class Application():
+    """Base class for CustomApplication. """
+
     def __init__(self, name, application_type, description=None):
         self.name = name
         self.application_type = application_type
@@ -60,31 +69,31 @@ class Application():
 
 
 class CustomApplication(Application):
-    """
-    CustomApplication class for modeling application authorization using the OAA Application template.
+    """Class for modeling application authorization using the OAA Application template.
 
-    CustomApplication class consists of identities, resources and permissions and produce OAA JSON payload for push.
+    CustomApplication class consists of identities, resources and permissions and produces the OAA JSON payload for the
+    custom application template.
 
-    Classes uses dictionaries to track most components, dictionaries are all keys by string of the entity name
+    Class uses dictionaries to track most components, dictionaries are all keys by string of the entity identifier (name or id)
 
-    Arguments:
-        name (string): Name of custom application
-        application_type (string): Type for application, can be unique or share across multiple applications
-        description (string): Optional: Description for application
+    Args:
+        name (str): Name of custom application
+        application_type (str): Searchable property, can be unique or shared across multiple applications
+        description (str, optional): Description for application. Defaults to None.
 
     Attributes:
-        application_type (string): Type for application
-        custom_permissions (dict): Dictionary of CustomPermission class instances
-        description (string): Description for application
+        application_type (str): Searchable application type
+        custom_permissions (dict[OAAPermission]): Dictionary of class instances
+        description (str): Description for application
         identity_to_permissions (dict): Mapping of authorizations for identities to resources
-        idp_identities (dict): Dictionary of IdPIdentity class instances keyed by name
-        local_groups (dict): Dictionary of LocalGroup class instances keyed by identifier
-        local_roles (dict): Dictionary of LocalRole class instances keyed by identifier
-        local_users (dict): Dictionary of LocalUser class instances keyed by identifier
-        name (string): Name of custom application
+        idp_identities (dict[IdPIdentity]): Contains federated identities without a corresponding local account
+        local_groups (dict[LocalGroup]): Contains application groups (collections of users)
+        local_roles (dict[LocalRole]): Contains application roles (collections of permissions)
+        local_users (dict[LocalUser]): Contains users local to the application and their properties
+        name (str): Name of custom application
         properties (dict): key value pairs of property values, property keys must be defined as part of the property_definitions
-        property_definitions (dict): dictionary of the custom property names and types for the application
-        resources (dict): Dictionary of CustomResource class instances for applications resources keyed by name
+        property_definitions (ApplicationPropertyDefinitions): Custom property names and types for the application
+        resources (dict[CustomResource]): Contains data resources and subresources within the application
 
     """
 
@@ -104,7 +113,13 @@ class CustomApplication(Application):
         self.identity_to_permissions = {}
 
     def get_payload(self) -> dict:
-        """ return the complete OAA payload for application as serializable dictionary """
+        """Get the OAA payload.
+
+        Returns the complete OAA template payload for application as serializable dictionary
+
+        Returns:
+            dict: OAA payload as dictionary
+        """
 
         payload = {}
         payload['custom_property_definition'] = {"applications": [self.property_definitions.to_dict()]}
@@ -114,7 +129,7 @@ class CustomApplication(Application):
         return payload
 
     def app_dict(self) -> dict:
-        """ returns the 'applications' section of the payload as serializable dictionary """
+        """ Return the 'applications' section of the payload as serializable dictionary. """
         # self.property_definitions.validate_properties(self.properties, "application")
 
         repr = {"name": self.name,
@@ -131,7 +146,7 @@ class CustomApplication(Application):
         return repr
 
     def permissions_dict(self) -> dict:
-        """ returns the 'permissions' section of the payload as serializable dictionary """
+        """ Return the 'permissions' section of the payload as serializable dictionary. """
         # TODO: error handling for empty list or non-permissions
         if not self.custom_permissions:
             raise Exception("No custom permissions defined, must define at least one permission")
@@ -139,13 +154,19 @@ class CustomApplication(Application):
         return [permission.to_dict() for permission in self.custom_permissions.values()]
 
     def define_custom_permission(self, custom_permission: CustomPermission) -> CustomPermission:
-        """ add a custom permission to the application. Custom permission map application specific permission to the Veza canonical model
+        """Add a custom permission to the application.
+
+        .. deprecated::
+            See `CustomApplication.add_custom_permission()`
 
         Args:
-            custom_permission (CustomPermission): CustomPermission class
+          custom_permission (CustomPermission): CustomPermission class
 
         Raises:
           Exception: Duplicate Keys
+
+        Returns:
+            CustomPermission: The defined custom Permission
         """
 
         if not isinstance(custom_permission, CustomPermission):
@@ -158,16 +179,16 @@ class CustomApplication(Application):
 
         return self.custom_permissions[custom_permission.name]
 
-    def add_custom_permission(self, name: str, permissions: list[OAAPermission], apply_to_sub_resources: bool = False, resource_types: list[str] = None) -> CustomPermission:
+    def add_custom_permission(self, name: str, permissions: List[OAAPermission], apply_to_sub_resources: bool = False, resource_types: List[str] = None) -> CustomPermission:
         """Create a new custom permission.
 
         Creates a new `CustomPermission` object for the application that can be used to authorize identities to the application, resources/sub-resource or as part of a role.
 
         Args:
             name (str): Name of the permission
-            permissions (list): List of OAAPermission enums
-            apply_to_sub_resouces (bool, Optional): If true, when permission is applied to the application or resource, identity also has permission to all children of application/resource. Defaults to False.
-            resource_types  (list, Option): List of resource types as strings that the permission relates to. Defaults to empty list.
+            permissions (list[OAAPermission]): Canonical permissions the custom permission represents
+            apply_to_sub_resources (bool, optional): If true, when permission is applied to the application or resource, identity also has permission to all children of application/resource. Defaults to False.
+            resource_types  (list, optional): List of resource types as strings that the permission relates to. Defaults to empty list.
 
         Returns:
             CustomPermission
@@ -187,15 +208,16 @@ class CustomApplication(Application):
         return self.custom_permissions[name]
 
     def add_resource(self, name: str, resource_type: str, description: str = None) -> CustomResource:
-        """ Create a new resource under the application. Resource type is used to group and filter application resources. It should be
-        consistent for all common resources of an application.
+        """ Create a new resource under the application.
+
+        Resource type is used to group and filter application resources. It should be consistent for all common resources of an application.
 
         Returns new resource object.
 
         Args:
             name (str): Name of resources
             resource_type (str): Type for resource
-            description (str): Optional description of resources
+            description (str, optional): Description of resources. Defaults to None.
 
         Returns:
             CustomResource
@@ -207,7 +229,7 @@ class CustomApplication(Application):
 
         return self.resources[name]
 
-    def add_local_user(self, name: str, identities: list[str] = None, groups: list[str] = None, unique_id: str = None) -> LocalUser:
+    def add_local_user(self, name: str, identities: List[str] = None, groups: List[str] = None, unique_id: str = None) -> LocalUser:
         """ Create a new local user for application.
 
         Local users can be assigned to groups and associated with resources via permissions or roles.
@@ -215,21 +237,20 @@ class CustomApplication(Application):
 
         Local users will be identified by `name` by default, if `unique_id` is provided it will be used as the identifier instead.
 
-        Local users can be referenced after creation if needed through `self.local_users[identifier]`
+        Local users can be referenced after creation using the `.local_users` dictionary attribute. Dictionary is keyed by unique_id or name if not using unique_id.
 
         Use `unique_id` when name is not guaranteed to be unique. All permission, group and role assignments will be referenced by unique_id.
-
 
         Args:
             name (str): Display name for user
             identities (list): List of identities as strings (usually email) for local user. Used to map local user to discovered IdP identities.
-            groups (list): List of group names (as string) to add user to
+            groups (list[LocalGroup]): List of group names (as string) to add user to
             unique_id (str, optional): Unique identifier for user for reference by ID
 
         Returns:
             LocalUser
-
         """
+
         if unique_id:
             identifier = unique_id
         else:
@@ -241,14 +262,14 @@ class CustomApplication(Application):
 
         return self.local_users[identifier]
 
-    def add_local_group(self, name: str, identities: list[str] = None, unique_id: str = None) -> LocalGroup:
+    def add_local_group(self, name: str, identities: List[str] = None, unique_id: str = None) -> LocalGroup:
         """ Create a new local group.
 
         Groups can be associated to resources via permissions or roles. All users in the local group are granted the group's authorization.
 
         Local groups will be identified by `name` by default, if `unique_id` is provided it will be used as the identifier instead
 
-        Local groups can be referenced after creation using `self.local_groups[identifier]`
+        Local groups can be referenced after creation using `.local_groups` dictionary attribute. Dictionary is keyed by unique_id or name if not using unique_id.
 
         Args:
             name (str): Display name for group
@@ -269,16 +290,14 @@ class CustomApplication(Application):
 
         return self.local_groups[identifier]
 
-    def add_local_role(self, name: str, permissions: list[str] = None, unique_id: str = None) -> LocalRole:
+    def add_local_role(self, name: str, permissions: List[str] = None, unique_id: str = None) -> LocalRole:
         """ Create a new local role.
 
-        A local role represents a collection of permissions.
-
-        Identities (local user, group, idp user) can be assigned a role to the application or resource, granting the role's permissions.
-
-        Local roles will be identified by `name` by default, if `unique_id` is provided it will be used as the identifier instead.
-
-        Local roles can be referenced after creation if needed through `self.local_roles[identifier]`
+        - A local role represents a collection of permissions.
+        - Identities (local user, group, idp user) can be assigned a role to the application or resource, granting the role's permissions.
+        - Local roles will be identified by `name` by default, if `unique_id` is provided it will be used as the identifier instead.
+        - Local roles can be referenced after creation if needed through `.local_roles` dictionary attribute.
+        - When a permission that has `resource_types` is added to a role, it will only apply to resources with a matching `resource_type`
 
         Args:
             name (str): Display name for role
@@ -300,10 +319,14 @@ class CustomApplication(Application):
         return self.local_roles[identifier]
 
     def add_idp_identity(self, name: str) -> IdPIdentity:
-        """ IdP users or groups can be authorized directly to applications and resources by associating permissions and roles with the IdP identity's principal name or email.
+        """ Create an IdP principal identity.
+
+        IdP users and groups can be authorized directly to applications and resources
+        by associating custom application permissions and roles with an IdP identity's
+        name or email.
 
         Args:
-            name (str): principal name or email for IdP user or group
+            name (str): IdP unique identifier for user or group.
 
         Returns:
             IdPIdentity
@@ -320,7 +343,7 @@ class CustomApplication(Application):
 
         Args:
             key (str): Name for the tag
-            value (str): Optional string value for tag
+            value (str, optional): String value for tag. Defaults to "".
         """
 
         tag = Tag(key=key, value=value)
@@ -328,17 +351,24 @@ class CustomApplication(Application):
             self.tags.append(tag)
 
     def set_property(self, property_name: str, property_value: any) -> None:
-        """ Set a custom property for the application. Property name and type be defined first using `self.property_definitions.define_application_property()`
-        before calling `set_property()`
+        """ Set a custom property value for the application.
+
+        Property name must be defined for `CustomApplication` before calling set_property. See example below and
+        `ApplicationPropertyDefinitions.define_application_property` for more information on defining properties.
 
         Args:
             property_name (str): Name of property to set value for, property names must be defined as part of the application property_definitions
             property_value (Any): Value for property, type should match OAAPropertyType for property definition
 
         Raises:
-            OAATemplateException: If property name is not defined as part of the parent property_definitions
+            OAATemplateException: If property name is not defined
 
+        Example:
+            >>> app = CustomApplication("App", application_type="example")
+            >>> app.property_definitions.define_application_property(name="my_property", property_type=OAAPropertyType.STRING)
+            >>> app.set_property("my_property", "property value")
         """
+
         # validate property name is defined, validate_property_name will raise exception if not
         if not self.property_definitions:
             raise OAATemplateException(f"No custom properties defined, cannot set value for property {property_name}")
@@ -348,7 +378,10 @@ class CustomApplication(Application):
         return
 
     def add_access(self, identity, identity_type, permission, resource=None):
-        """ Legacy method for backwards compatibility, access should be added through identity (local_role, local_group, idp) """
+        """ Legacy method for backwards compatibility.
+
+        .. deprecated::
+            Access should be added through identity (local_role, local_group, idp) """
 
         if resource:
             apply_to_application = True
@@ -381,7 +414,7 @@ class CustomApplication(Application):
         return
 
     def get_identity_to_permissions(self) -> dict:
-        """ Collect authorizations for all identities into a single list """
+        """ Collect authorizations for all identities into a single list. """
 
         identity_to_permissions = []
         identities = []
@@ -396,24 +429,26 @@ class CustomApplication(Application):
 
 class CustomResource():
     """
-    CustomResource class for resources and sub-resources. Should be used for representing components of the application where authorization
+    Class for resources and sub-resources.
+
+    Should be used for representing components of the application to which authorization
     is granted. Each resource has a name and a type. The type can be used for grouping and filtering.
 
     Arguments:
-        name (string): display name for resource, must be unique to parent application or resource
-        resource_type (string): type for resource
-        description (string): description for resource
-        application_name (string): name of parent application
-        resource_key (string): for sub-resources represents the sub-resource's parent path
+        name (str): display name for resource, must be unique to parent application or resource
+        resource_type (str): type for resource
+        description (str): description for resource
+        application_name (str): name of parent application
+        resource_key (str): for sub-resources represents the sub-resource's parent path
 
     Attributes:
-        name (string): display name for resource, must be unique to parent application or resource
-        resource_type (string): type for resource
-        application_name (string): name of parent application
-        resource_key (string): for sub-resources represents the sub-resource's parent path
+        name (str): display name for resource, must be unique to parent application or resource
+        resource_type (str): type for resource
+        application_name (str): name of parent application
+        resource_key (str): for sub-resources represents the sub-resource's parent path
         sub_resources (dict): dictionary of sub-resources keyed by name
         properties (dict): dictionary of properties set for resource
-        tags (list): list of tags
+        tags (list[Tag]): list of tags
     """
 
     def __init__(self, name: str, resource_type: str, description: str, application_name: str, resource_key: str = None, property_definitions: ApplicationPropertyDefinitions = None) -> None:
@@ -436,7 +471,7 @@ class CustomResource():
         self.resource_permissions = {}
 
     def to_dict(self) -> dict:
-        """ return dictionary representation of resource """
+        """ Return the dictionary representation of resource."""
 
         repr = {
             "name": self.name,
@@ -453,12 +488,12 @@ class CustomResource():
         return {k: v for k, v in repr.items() if v}
 
     def add_sub_resource(self, name: str, resource_type: str, description: str = None) -> CustomResource:
-        """ Create a new sub-resource under current resource
+        """ Create a new sub-resource under current resource.
 
         Args:
             name (str): display name for resource
             resource_type (str): type for resource
-            description (str): Optional string description
+            description (str, optional): String description. Defaults to None.
 
         Returns:
             CustomResource
@@ -474,8 +509,9 @@ class CustomResource():
         return self.sub_resources[name]
 
     def add_resource_connection(self, id: str, node_type: str) -> None:
-        """ Add an external connection to the resource. Allows connecting resource to other entities discovered by Veza such as service accounts
-        or AWS IAM roles.
+        """ Add an external connection to the resource.
+
+        Used to add a relationship to another entity discovered by Veza such as a service account or AWS IAM role.
 
         Args:
             id (str): Unique identifier for connection entity
@@ -498,30 +534,37 @@ class CustomResource():
         """ No longer supported, access should be added through identity (local_user, local_group, idp) """
         raise Exception("No longer supported: Add access via identity")
 
-    def add_tag(self, key, value=""):
-        """ Add a new tag to resource
+    def add_tag(self, key: str, value: str = "") -> None:
+        """ Add a new tag to resource.
 
         Args:
-            key (str): Name for the tag
-            value (str): Optional string value for tag
+            key (str): Name for the tag.
+            value (str, optional): String value for tag. Defaults to "".
         """
         tag = Tag(key=key, value=value)
         if tag not in self.tags:
             self.tags.append(tag)
 
     def set_property(self, property_name: str, property_value: any) -> None:
-        """ Set the value for a custom property on a resource or sub-resource. Property must be defined for resource type
-        using the `CustomApplication.property_definitions.define_resource_property(resource_type, name, property_type)` function
-        for the instance of the OAA CustomApplication.
+        """ Set the value for a custom property on a resource or sub-resource.
+
+        Property name must be defined for resource type before calling `set_property()`. See example below and
+        `ApplicationPropertyDefinitions.define_resource_property` for more information on defining properties.
 
         Args:
             property_name (str): Name of property to set value for
             property_value (Any): Value for property, type should match OAAPropertyType for property definition
 
         Raises:
-            OAATemplateException: If property_name is not defined as part of the parent CustomApplication.property_definitions
+            OAATemplateException: If `property_name` is not defined
 
+        Example:
+            >>> app = CustomApplication("App", application_type="example")
+            >>> app.property_definitions.define_resource_property(resource_type="cog", name="my_property", property_type=OAAPropertyType.STRING)
+            >>> cog1 = app.add_resource(name="cog1", resource_type="cog")
+            >>> cog1.set_property("my_property", "this value")
         """
+
         # validate property name is defined, validate_property_name will raise exception if not
         if not self.property_definitions:
             raise OAATemplateException(f"No custom properties defined, cannot set value for property {property_name}")
@@ -530,22 +573,22 @@ class CustomResource():
 
 
 class Identity():
-    """
-    Base class for deriving all identity types. Should not be used directly
+    """Base class for deriving all identity types (should not be used directly).
 
     Args:
-        name (string): name of identity
+        name (str): name of identity
         identity_type (OAAIdentityType): Veza Identity Type (local_user, local_group, idp)
-        unique_id (string, optional): ID of entity for reference by ID
+        unique_id (str, optional): ID of entity for reference by ID
+
     Attributes:
-        name (string): name of identity
+        name (str): name of identity
         identity_type (OAAIdentityType): Veza Identity Type (local_user, local_group, idp)
-        application_permissions (List(CustomPermission)): List of permissions identity has directly to custom application
+        application_permissions (list[CustomPermission]): List of permissions identity has directly to custom application
         resource_permissions (dict): Dictionary of custom permissions associated with resources and sub-resources. Key is permission, value is list of resource keys
-        application_roles (List(LocalRole)): List of roles identity has directly to custom application
+        application_roles (LocalRole): List of roles identity has directly to custom application
         resource_roles (dict): Dictionary of local_roles for resources and sub-resources. Key is roles, value is list of resource keys
         properties (dict): Dictionary of properties for identity, allowed values will vary by identity type
-        tags (list): List of tags
+        tags (list[Tag]): List of tags
     """
 
     def __init__(self, name: str, identity_type: OAAIdentityType, unique_id: str = None, property_definitions: ApplicationPropertyDefinitions = None) -> None:
@@ -562,12 +605,15 @@ class Identity():
         self.properties = {}
         self.tags = []
 
-    def add_permission(self, permission: str, resources: list[CustomResource] = None, apply_to_application: bool = False) -> None:
+    def add_permission(self, permission: str, resources: List[CustomResource] = None, apply_to_application: bool = False) -> None:
         """
-        Add a permission to an identity for either the application or application resource/sub-resources
+        Add a permission to an identity.
+
+        Permission can apply to either the application or application resource/sub-resources
+
         Args:
             permissions ([str]): List of strings representing the permission names
-            resource (CustomResource): Optional custom resource, if None permission is applied to application
+            resource (CustomResource, optional): Custom resource, if None permission is applied to application. Defaults to None.
             apply_to_application (bool): Apply permission to application when True, defaults to False
         """
         if not resources:
@@ -595,12 +641,14 @@ class Identity():
             else:
                 self.resource_permissions[permission] = [r.resource_key for r in resources]
 
-    def add_role(self, role: str, resources: list[CustomResource] = None, apply_to_application: Optional[bool] = None) -> None:
-        """
-        Add a role to an identity for either the application or application resource/sub-resource
+    def add_role(self, role: str, resources: List[CustomResource] = None, apply_to_application: Optional[bool] = None) -> None:
+        """ Add a role to an identity.
+
+        Role to authorize identity to either the application or application resource/sub-resource based on role's permissions.
+
         Args:
-            roles ([str]): List of strings representing the role identifier
-            resource (CustomResource): Optional custom resource, if None role is applied to application
+            role (str): Name of role as string
+            resources (List[CustomResource], optional): Custom resource, if None role is applied to application. Defaults to None.
             apply_to_application (bool): Apply permission to application when True, False will replace existing value, None will leave previous setting if any
         """
         if not resources:
@@ -618,11 +666,13 @@ class Identity():
                 self.role_assignments[role]["apply_to_application"] = apply_to_application
             self.role_assignments[role]["resources"].extend([r.resource_key for r in resources])
 
-    def get_identity_to_permissions(self, application_name: str):
-        """
-        Returns a JSON serializable dictionary of all the identities permissions and roles
+    def get_identity_to_permissions(self, application_name: str) -> dict:
+        """Get a JSON serializable dictionary of all the identity's permissions and roles.
+
+        Formats the identity's permissions and roles for the Custom Application template payload
+
         Returns:
-            response: JSON serializable dictionary of all the identities permissions and roles
+            dict: JSON serializable dictionary of all the identity's permissions and roles
         """
         response = {}
         if self.unique_id:
@@ -661,11 +711,11 @@ class Identity():
         return response
 
     def add_tag(self, key: str, value: str = "") -> None:
-        """ Add a new tag to identity
+        """ Add a new tag to identity.
 
         Args:
             key (str): Name for the tag
-            value (str): Optional string value for tag
+            value (str, optional): String value for tag. Defaults to "".
         """
 
         tag = Tag(key=key, value=value)
@@ -673,17 +723,28 @@ class Identity():
             self.tags.append(tag)
 
     def set_property(self, property_name: str, property_value: any) -> None:
-        """ set a custom defined property to a specific value on an identity. Property names are checked against defined custom properties
-        and will raise an exception if property name is not defined for identity type prior to calling `set_property`
+        """ Set a custom defined property to a specific value on an identity.
+
+        Property name must be defined for identity type before calling `set_property()`. See example below for `LocalUser`
+        and `ApplicationPropertyDefinitions.define_local_user_property` for more information on defining properties.
+        Property must be defined for the correct `Identity` type (`LocalUser` or `LocalGroup`, `IdPIdentity` does not support
+        custom properties).
 
         Args:
             property_name (str): Name of property to set value for
-            property_value (Any): Value for property, type should match OAAPropertyType for property definition
+            property_value (Any): Value for property, type should match `OAAPropertyType` for property definition
 
         Raises:
-            OAATemplateException: If property_name is not defined as part of the parent CustomApplication.property_definitions
+            OAATemplateException: If property with `property_name` is not defined.
 
+        Example:
+
+            >>> app = CustomApplication("App", application_type="example")
+            >>> app.property_definitions.define_local_user_property(name="my_property", property_type=OAAPropertyType.STRING)
+            >>> user1 = app.add_local_user(name="user1")
+            >>> user1.set_property("my_property", "value for user1")
         """
+
         if not self.property_definitions:
             raise OAATemplateException("No custom property definitions found for entity")
 
@@ -692,34 +753,36 @@ class Identity():
 
 
 class LocalUser(Identity):
-    """ LocalUser identity, derived from Identity base class. Used to represent local application users. Can be associated to an IdP user or not.
+    """ LocalUser identity, derived from Identity base class.
+
+    Used to model an application user. Can be associated with an external IdP user, or represent a local account.
 
     Args:
-        name (string): name of identity
+        name (str): name of identity
         identities (list): list of strings for IdP identity association
-        groups (list): list of group names as strings to add user too
+        groups (list[LocalGroup]): list of group names as strings to add user too
         unique_id (string, optional): For reference by ID
 
     Attributes:
-        name (string): name of identity
-        id (string): ID of entity for ID based reference
+        name (str): name of identity
+        id (str): ID of entity for ID based reference
         identities (list): list of strings for IdP identity association
-        groups (list): list of group names as strings to add user too
+        groups (list[LocalGroup]): list of group names as strings to add user too
         identity_type (OAAIdentityType): Veza Identity Type (local_user)
-        application_permissions (List(CustomPermission)): List of permissions identity has directly to custom application
+        application_permissions (list[CustomPermission]): Permissions identity has directly to custom application
         resource_permissions (dict): Dictionary of custom permissions associated with resources and sub-resources. Key is permission, value is list of resource keys
-        application_roles (List(LocalRole)): List of custom application roles assigned directly to the identity
+        application_roles (list[LocalRole]): Custom application roles assigned directly to the identity
         resource_roles (dict): Dictionary of local_roles for resources and sub-resources. Key is roles, value is list of resource keys
         properties (dict): Dictionary of properties for identity, allowed values will vary by identity type
-        tags (list): List of tags
-        is_active (boolean): Defaults to None for unset
+        tags (list[Tag]): List of tags
+        is_active (bool): Defaults to None for unset
         created_at (str): RFC3339 time stamp for user creation
         last_login_at (str): RFC3339 time stamp for last login
         deactivated_at (str): RFC3339 for user deactivate time
         password_last_changed_at (str): RFC3339 time stamp for last password change
     """
 
-    def __init__(self, name: str, identities: list[str] = None, groups: list[str] = None, unique_id: str = None, property_definitions: ApplicationPropertyDefinitions = None) -> None:
+    def __init__(self, name: str, identities: List[str] = None, groups: List[str] = None, unique_id: str = None, property_definitions: ApplicationPropertyDefinitions = None) -> None:
         super().__init__(name, identity_type=OAAIdentityType.LocalUser, unique_id=unique_id, property_definitions=property_definitions)
         self.identities = append_helper(None, identities)
         self.groups = append_helper(None, groups)
@@ -732,15 +795,18 @@ class LocalUser(Identity):
         self.password_last_changed_at = None
 
     def add_identity(self, identity: str) -> None:
-        """ add an identity to user, identity should email or principal identifier for an IdP user (Okta, Azure, ect). Veza will create a connection from the application local user to IdP identity
+        """ Add an identity to user.
+
+        Identity should match the email address or another principal identifier for an IdP user (Okta, Azure, ect). Veza
+        will create a connection from the application local user to IdP identity.
 
         Args:
             identity (str): email or identifier for IdP user
         """
         self.identities = append_helper(self.identities, identity)
 
-    def add_identities(self, identities: list[str]) -> None:
-        """add multiple identities to a local user from a list
+    def add_identities(self, identities: List[str]) -> None:
+        """ Add multiple identities to a local user from a list.
 
         Args:
             identities (list[str]): list of identities to add to user
@@ -760,16 +826,16 @@ class LocalUser(Identity):
         return
 
     def add_group(self, group: str) -> None:
-        """ add user to local group (group must be created separately)
+        """ Add user to local group (group must be created separately).
 
         Args:
-            group (str): name of local group
+            group (str): identifier of local group
         """
 
         self.groups = append_helper(self.groups, group)
 
     def to_dict(self) -> dict:
-        """ Output user to dictionary for payload """
+        """ Output user to dictionary for payload. """
 
         user = {"name": self.name,
                 "identities": self.identities,
@@ -791,24 +857,26 @@ class LocalUser(Identity):
 
 
 class LocalGroup(Identity):
-    """ LocalGroup identity, derived from Identity base class. Used to represent groups of local users for application.
+    """ LocalGroup identity.
+
+    Derived from Identity base class. Used to represent groups of local users for application.
 
     Args:
-        name (string): name of group
+        name (str): name of group
         identities (list): list of strings for IdP identity association
         unique_id (string, optional): Unique identifier for group
 
     Attributes:
-        name (string): name of identity
+        name (str): name of identity
         identities (list): list of strings for IdP identity association
-        groups (list): list of group names as strings that group is member of for nested groups
+        groups (list[LocalGroup]): list of group names as strings that group is member of for nested groups
         identity_type (OAAIdentityType): Veza Identity Type, local_group
-        application_permissions (List(CustomPermission)): List of permissions identity has directly to custom application
+        application_permissions (list[CustomPermission]): permissions identity has directly to custom application
         resource_permissions (dict): Dictionary of custom permissions associated with resources and sub-resources. Key is permission, value is list of resource keys
-        application_roles (List(LocalRole)): List of roles identity has directly to custom application
+        application_roles (list[LocalRole]): list of roles identity has directly to custom application
         resource_roles (dict): Dictionary of local_roles for resources and sub-resources. Key is roles, value is list of resource keys
         properties (dict): Dictionary of properties for identity, allowed values will vary by identity type
-        tags (list): List of tags
+        tags (list[Tag]): List of tags
         created_at (str): RFC3339 time stamp for group creation time
     """
 
@@ -819,10 +887,10 @@ class LocalGroup(Identity):
         self.created_at = None
 
     def add_group(self, group: str) -> None:
-        """ add user to local group (group must be created separately)
+        """ Add user to local group (group must be created separately).
 
         Args:
-            group (str): name of local group
+            group (str): identifier of local group
         """
 
         if group == self.name:
@@ -831,7 +899,10 @@ class LocalGroup(Identity):
         self.groups = append_helper(self.groups, group)
 
     def add_identity(self, identity: str) -> None:
-        """ add an identity to user, identity should be the email address or another valid identifier for an IdP principal (Okta, Azure, ect). Veza will create a connection from the application local user to IdP identity
+        """ Add an identity to user.
+
+        The  email address or another valid identifier should match that of an IdP principal (Okta, Azure, ect).
+        Veza will create a connection from the application local user to IdP identity.
 
         Args:
             identity (str): primary IdP identifier for group to associate
@@ -839,7 +910,7 @@ class LocalGroup(Identity):
         self.identities = append_helper(self.identities, identity)
 
     def to_dict(self) -> dict:
-        """ Output group to dictionary for payload """
+        """ Output group to dictionary for payload. """
         group = {"name": self.name,
                 "identities": self.identities,
                 "created_at": self.created_at,
@@ -854,52 +925,58 @@ class LocalGroup(Identity):
         return {k: v for k, v in group.items() if v}
 
 class IdPIdentity(Identity):
-    """ IdP identity, derived from Identity base class. Used to associate IdP identities (users or groups) directly to resource where concept of local users/groups doesn't apply to application.
+    """ IdP identity derived from Identity base class.
+
+    Used to associate IdP identities (users or groups) directly to resource where concept of local users/groups doesn't apply to application.
 
     Args:
-        name (string): Primary IdP identifier for identity (email, group name, etc)
+        name (str): Primary IdP identifier for identity (email, group name, etc)
 
     Attributes:
-        name (string): name of identity
+        name (str): name of identity
         identity_type (OAAIdentityType): Veza Identity Type, (idp)
-        application_permissions (List(CustomPermission)): List of permissions identity has directly to custom application
+        application_permissions (list[CustomPermission]): permissions identity has directly to custom application
         resource_permissions (dict): Dictionary of custom permissions associated with resources and sub-resources. Key is permission, value is list of resource keys
-        application_roles (List(LocalRole)): List of roles identity has directly to custom application
+        application_roles (list[LocalRole]): roles identity has directly to custom application
         resource_roles (dict): Dictionary of local_roles for resources and sub-resources. Key is roles, value is list of resource keys
         properties (dict): Dictionary of properties for identity, allowed values will vary by identity type
-        tags (list): List of tags
+        tags (list[Tag]): List of tags
     """
 
     def __init__(self, name: str) -> None:
         super().__init__(name, identity_type=OAAIdentityType.IdP)
 
     def set_property(self, property_name: str, property_value: any) -> None:
-        """ IdP identities do not support custom properties since the identity is discovered through the provider (Okta, Azure, ect) """
+        """ Set custom IdP property (no functionality).
+
+        IdP identities do not support custom properties since the identity is discovered through the provider (Okta, Azure, etc)
+        """
         raise OAATemplateException("IdP identities do not support custom properties")
 
 
 class LocalRole():
     """Represent a Custom Application Local Role.
 
-    Local Roles are a collection of permissions (as `CustomPerssion`). Roles can be used to associate a local user, group or IdP identity to an application, resource or sub-resource.
+    Local Roles are a collection of permissions (as `CustomPermission`).
+    Roles can be used to associate a local user, group or IdP identity to an application, resource or sub-resource.
 
-    Permissions can either be assigned at creation and/or added later. If the `CustomPermission` definition includes resource types in the `resource_types` list the permission will
+    Permissions can either be assigned at creation and/or added later.
+
+    If the `CustomPermission` definition includes resource types in the `resource_types` list, the permission will
     only be assigned to resources/sub-resources that match that type as part of an assignment.
 
     Args:
-        name (string): name of local role
-        permissions (list): Optional: list of custom permission names (strings) to associate with the role
+        name (str): name of local role
+        permissions (list[CustomPermission], optional): List of custom permission names (strings) to associate with the role. Defaults to empty list.
         unique_id (string, optional): Unique identifier for role for identification by ID
-
-     Attributes:
-        name (string): name of local role
-        unique_id (string): Unique identifier for role for identification by ID
-        permissions (list): list of custom permission names (strings) to associate with the role
-        tags (list): list of Tags instances
-
+    Attributes:
+        name (str): name of local role
+        unique_id (str): Unique identifier for role for identification by ID
+        permissions (list[CustomPermission]): list of custom permission names (strings) to associate with the role
+        tags (list[Tag]): list of Tags instances
     """
 
-    def __init__(self, name: str, permissions: list[str] = None, unique_id: str = None, property_definitions: ApplicationPropertyDefinitions = None) -> None:
+    def __init__(self, name: str, permissions: List[str] = None, unique_id: str = None, property_definitions: ApplicationPropertyDefinitions = None) -> None:
         self.name = name
         if unique_id:
             self.unique_id = str(unique_id)
@@ -918,12 +995,11 @@ class LocalRole():
         self.properties = {}
         self.tags = []
 
-    def add_permissions(self, permissions: list[str]) -> None:
-        """
-        Add a permission to the role
+    def add_permissions(self, permissions: List[str]) -> None:
+        """ Add a permission to the role.
 
         Args:
-            permissions (List): List of permission names (strings) to add to role
+            permissions (list): List of permission names (strings) to add to role
 
         """
         if not isinstance(permissions, list):
@@ -936,11 +1012,11 @@ class LocalRole():
         self.permissions.extend(permissions)
 
     def add_tag(self, key: str, value: str = "") -> None:
-        """ Add a new tag to role
+        """ Add a new tag to role.
 
         Args:
             key (str): Name for the tag
-            value (str): Optional string value for tag
+            value (str, optional): String value for tag. Defaults to "".
         """
 
         tag = Tag(key=key, value=value)
@@ -948,15 +1024,23 @@ class LocalRole():
             self.tags.append(tag)
 
     def set_property(self, property_name: str, property_value: any) -> None:
-        """ Set a custom property for the local_role instance. Property name and type for local_role must be defined by
-        `CustomApplication.property_definitions.define_local_role_property()` before set_property can be called.
+        """ Set the value for custom property on a local role.
+
+        Property name must be defined for local roles before calling `set_property()`. See example below and
+        `ApplicationPropertyDefinitions.define_local_role_property` for more information on defining properties.
 
         Args:
             property_name (str): Name of property to set value for
             property_value (Any): Value for property, type should match OAAPropertyType for property definition
 
         Raises:
-            OAATemplateException: If property name is not defined as part of the parent CustomApplication.property_definitions
+            OAATemplateException: If property name is not defined.
+
+        Example:
+            >>> app = CustomApplication("App", application_type="example")
+            >>> app.property_definitions.define_local_role_property(name="my_property", property_type=OAAPropertyType.STRING)
+            >>> role1 = app.add_local_role(name="role1")
+            >>> role1.set_property(property_name="my_property", property_value="role1s value")
 
         """
         # validate property name is defined, validate_property_name will raise exception if not
@@ -968,11 +1052,10 @@ class LocalRole():
         return
 
     def to_dict(self) -> dict:
-        """
-        Convert role to dictionary for inclusion in JSON payload.
+        """ Convert role to dictionary for inclusion in JSON payload.
 
         Returns:
-            response: serializable dictionary of role
+            dict: serializable dictionary of role
 
         """
         response = {}
@@ -989,28 +1072,26 @@ class LocalRole():
 class CustomPermission():
     """CustomPermission class for defining `CustomApplication` permissions.
 
-    Custom permissions represent the named permissions for the application in its terms (e.g. "Admin") and define the
-    Veza canonical mapping (e.g. DataRead, MetadataRead)
-
-    A permission can either be applied directly to an application or resource or assigned as part of a role.
-
-    Optionally, when permissions are used as part of a role, if the `resource_types` list is populated the permission
+    - Custom permissions represent the named permissions for the application in its terms (e.g. "Admin" or "PUSH") and define the
+    Veza canonical mapping (e.g. DataRead, MetadataRead, DataWrite).
+    - A permission can either be applied directly to an application or resource or assigned as part of a role.
+    - Optionally, when permissions are used as part of a role, if the `resource_types` list is populated the permission
     will only be applied to resources who's type is in the `resource_types` list when the role is applied to a resource.
 
     Args:
         name (str): Display name for permission
         permissions (list): List of OAAPermission enums that represent the canonical permissions
-        apply_to_sub_resources (bool, Optional): If true, when permission is applied to the application or resource, identity also has permission to all children of application/resource. Defaults to `False`.
-        resource_types(list, Optional): List of resource types as strings that the permission relates to. Defaults to empty list.
+        apply_to_sub_resources (bool, optional): If true, when permission is applied to the application or resource, identity also has permission to all children of application/resource. Defaults to `False`.
+        resource_types(list, optional): List of resource types as strings that the permission relates to. Defaults to empty list.
 
     Attributes:
         name (str): Display name for permission
-        permissions (list): List of OAAPermission enums that represent the canonical permissions
+        permissions (list[OAAPermission]): List of OAAPermission enums that represent the canonical permissions
         apply_to_sub_resources (bool): If true, when permission is applied to the application or resource, identity also has permission to all children of application/resource.
         resource_types (list): List of resource types as strings that the permission relates to.
     """
 
-    def __init__(self, name: str, permissions: list[OAAPermission], apply_to_sub_resources: bool = False, resource_types: list = None) -> None:
+    def __init__(self, name: str, permissions: List[OAAPermission], apply_to_sub_resources: bool = False, resource_types: list = None) -> None:
         self.name = name
         self.permission_type = []
         self.apply_to_sub_resources = apply_to_sub_resources
@@ -1022,7 +1103,7 @@ class CustomPermission():
 
 
     def to_dict(self) -> None:
-        """ returns dictionary representation for payload """
+        """ Returns dictionary representation for payload. """
         return {"name": self.name,
                 "permission_type": self.permission_type,
                 "apply_to_sub_resources": self.apply_to_sub_resources,
@@ -1041,8 +1122,8 @@ class CustomPermission():
         if resource_type not in self.resource_types:
             self.resource_types.append(resource_type)
 
-    def __validate_permissions(self, permissions: list[OAAPermission]) -> None:
-        """Validate permissions are OAAPermission type
+    def __validate_permissions(self, permissions: List[OAAPermission]) -> None:
+        """Validate permissions are OAAPermission type.
 
         Args:
             permissions (list): List of entities to validate are of type OAAPermission
@@ -1073,7 +1154,7 @@ class CustomPermission():
 # Custom properties related classes
 ###############################################################################
 class OAAPropertyType(str, Enum):
-    """ Supported types for custom properties on OAA entities such as application, resource, identity  """
+    """ Supported types for custom properties on OAA entities such as application, resource, and identity.  """
 
     BOOLEAN = "BOOLEAN"                 # True/False boolean
     NUMBER = "NUMBER"                   # integer number
@@ -1085,10 +1166,11 @@ class OAAPropertyType(str, Enum):
 class ApplicationPropertyDefinitions():
     """
     Model for defining custom properties for application and its entities (users, groups, roles, resources).
+
     Property definitions define the names for additional entity properties and the expected type.
 
     Args:
-        application_type (str): type of custom application property definitions are for
+        application_type (str): type of custom application property definitions apply to
 
     Attributes:
         application_properties (dict): property definitions for application
@@ -1107,7 +1189,7 @@ class ApplicationPropertyDefinitions():
         self.resource_properties = {}
 
     def to_dict(self) -> dict:
-        """ returns property definitions as dictionary ready for OAA payload """
+        """ Return property definitions as dictionary ready for OAA payload """
         definitions = {
             "application_type": self.application_type,
             "application_properties": self.application_properties,
@@ -1124,7 +1206,7 @@ class ApplicationPropertyDefinitions():
         return definitions
 
     def define_application_property(self, name: str, property_type: OAAPropertyType) -> None:
-        """ define an application property
+        """ Define an application property.
 
         Args:
             name (str): name for property
@@ -1135,7 +1217,7 @@ class ApplicationPropertyDefinitions():
         self.application_properties[name] = property_type
 
     def define_local_user_property(self, name: str, property_type: OAAPropertyType) -> None:
-        """ define a local user property
+        """ Define a local user property.
 
         Args:
             name (str): name for property
@@ -1146,7 +1228,7 @@ class ApplicationPropertyDefinitions():
         self.local_user_properties[name] = property_type
 
     def define_local_group_property(self, name: str, property_type: OAAPropertyType) -> None:
-        """ define a local group property
+        """ Define a local group property.
 
         Args:
             name (str): name for property
@@ -1157,7 +1239,7 @@ class ApplicationPropertyDefinitions():
         self.local_group_properties[name] = property_type
 
     def define_local_role_property(self, name: str, property_type: OAAPropertyType) -> None:
-        """ define a local role property
+        """ Define a local role property.
 
         Args:
             name (str): name for property
@@ -1168,7 +1250,7 @@ class ApplicationPropertyDefinitions():
         self.local_role_properties[name] = property_type
 
     def define_resource_property(self, resource_type: str, name: str, property_type: OAAPropertyType) -> None:
-        """ define a property for a resource by type of resource
+        """ Define a property for a resource by type of resource.
 
         Args:
             resource_type (str): type of resource property definition is for
@@ -1183,8 +1265,7 @@ class ApplicationPropertyDefinitions():
             self.resource_properties[resource_type][name] = property_type
 
     def validate_property_name(self, property_name: str, entity_type: str, resource_type: str = None) -> bool:
-        """ validates that a property name has been defined for given resource type. Raises exception if
-        property name has not been previously defined for entity
+        """ Validate that a property name has been defined for given resource type.
 
         Args:
             property_name (str): name of property to validate
@@ -1192,7 +1273,7 @@ class ApplicationPropertyDefinitions():
             resource_type (str): (optional) type for validating resource property names, only applicable to entity_type resource
 
         Raises:
-            OAATemplateException: If property name is not defined
+            OAATemplateException: If property name has not been previously defined for entity
 
         """
         valid_property_names = []
@@ -1221,7 +1302,7 @@ class ApplicationPropertyDefinitions():
             raise OAATemplateException(f"unknown property name {property_name}")
 
     def __validate_types(self, name: str, property_type: OAAPropertyType) -> None:
-        """ helper function to validate that custom property parameters are of the correct types
+        """ Helper function to validate that custom property parameters are of the correct types.
 
         Args:
             name (str): name or property
@@ -1238,7 +1319,7 @@ class ApplicationPropertyDefinitions():
 # Custom IdP Provider
 ###############################################################################
 class IdPEntityType(Enum):
-    """ IdP entity types  """
+    """ IdP entity types.  """
 
     USER = "USER"
     GROUP = "GROUP"
@@ -1246,7 +1327,7 @@ class IdPEntityType(Enum):
 
 
 class IdPProviderType(str, Enum):
-    """ Veza supported IdP provider types """
+    """ Veza supported IdP provider types. """
 
     ACTIVE_DIRECTORY = "active_directory"
     ANY = "any"
@@ -1266,18 +1347,18 @@ class CustomIdPProvider():
     Classes uses dictionaries to track most components, dictionaries are all keyed by string of the entity name
 
     Args:
-        name (string): Name of IdP
-        idp_type (string): Type descriptor for IdP, can be unique or share across multiple IdP e.g. ldap, IPA
-        domain (string): IdP domain name
-        description (string): Optional: Description for IdP
+        name (str): Name of IdP
+        idp_type (str): Type descriptor for IdP, can be unique or share across multiple IdP e.g. ldap, IPA
+        domain (str): IdP domain name
+        description (str, optional): Description for IdP. Defaults to None.
 
     Attributes:
-        name (string): Name of custom IdP
-        idp_type (string): Type for IdP
-        description (string): Description for IdP
+        name (str): Name of custom IdP
+        idp_type (str): Type for IdP
+        description (str): Description for IdP
         domain (CustomIdPDomain): Domain model, created with domain name at init
-        users (dict): Dictionary of CustomIdPUser class instances
-        groups (dict): Dictionary of CustomIdPGroup class instances
+        users (dict[CustomIdPUser]): Dictionary of CustomIdPUser class instances
+        groups (dict[CustomIdPGroup]): Dictionary of CustomIdPGroup class instances
         property_definitions (IdPPropertyDefinitions): Custom Property definitions for IdP instance
     """
 
@@ -1292,7 +1373,7 @@ class CustomIdPProvider():
         self.groups = {}
 
     def get_payload(self) -> dict:
-        """ returns formatted payload as dictionary for JSON conversion and upload """
+        """ Return formatted payload as dictionary for JSON conversion and upload """
         payload = {}
         payload['custom_property_definition'] = self.property_definitions.to_dict()
         payload['name'] = self.name
@@ -1303,13 +1384,15 @@ class CustomIdPProvider():
         return payload
 
     def add_user(self, name: str, full_name: str = None, email: str = None, identity: str = None) -> CustomIdPUser:
-        """ add user to IdP, if no identity is set name will be used as identity
+        """ Add user to IdP
+
+        if no identity is set name will be used as identity
 
         Arguments:
-            name (string): primary ID for user
-            full_name (string): optional full name for display
-            email (string): optional email for user
-            identity (string): optional unique identifier for user, if None name is used as identity
+            name (str): primary ID for user
+            full_name (str): optional full name for display
+            email (str): optional email for user
+            identity (str): optional unique identifier for user, if None name is used as identity
 
         Returns:
             CustomIdPUser
@@ -1324,12 +1407,12 @@ class CustomIdPProvider():
         return self.users[name]
 
     def add_group(self, name: str, full_name: str = None, identity: str = None) -> CustomIdPGroup:
-        """ Add group to IdP
+        """ Add group to IdP.
 
         Arguments:
-            name (string): primary ID for group
-            full_name (string): optional display name for group
-            identity (string): optional unique identifier for group, if None name is used as identity
+            name (str): primary ID for group
+            full_name (str): optional display name for group
+            identity (str): optional unique identifier for group, if None name is used as identity
 
         """
 
@@ -1341,13 +1424,13 @@ class CustomIdPProvider():
 
 
 class CustomIdPDomain():
-    """ Domain model for Custom IdP provider
+    """ Domain model for Custom IdP provider.
 
     Args:
-        name (string): domain name
+        name (str): domain name
 
     Attributes:
-        name (string): domain name
+        name (str): domain name
 
     """
 
@@ -1358,7 +1441,7 @@ class CustomIdPDomain():
         self.__property_definitions = property_definitions
 
     def to_dict(self) -> dict:
-        """ output function for payload """
+        """ Output function for payload. """
         domain = {}
         domain['name'] = self.name
         domain['tags'] = self.__tags
@@ -1367,14 +1450,24 @@ class CustomIdPDomain():
         return domain
 
     def set_property(self, property_name: str, property_value: any) -> None:
-        """ set a custom defined property for domain. Property names are checked against defined custom properties
-        and will raise an exception if property name is not defined for user prior to calling `set_property`
+        """ Set custom property value for domain.
+
+        Property name must be defined for domain before calling `set_property()`. See example below and
+        `IdPPropertyDefinitions.define_domain_property` for more information.
 
         Args:
             property_name (str): Name of property
             property_value (Any): Value for property, type should match OAAPropertyType for property definition
 
+        Raises:
+            OAATemplateException: If property with `property_name` is not defined.
+
+        Example:
+            >>> idp = CustomIdPProvider(name="Example IdP", idp_type="example", domain="example.com")
+            >>> idp.property_definitions.define_domain_property(name="my_property", property_type=OAAPropertyType.STRING)
+            >>> idp.domain.set_property(property_name="my_property", property_value="domain property value")
         """
+
         if not self.__property_definitions:
             raise OAATemplateException("No custom property definitions found for domain")
 
@@ -1383,23 +1476,23 @@ class CustomIdPDomain():
 
 
 class CustomIdPUser():
-    """ User model for CustomIdPProvider
+    """ User model for CustomIdPProvider.
 
     Args:
-        name (string): username for identity
-        email (string): primary email for user
-        full_name (string): Display name for user
-        identity (string): unique identifier for user, may be same as username or email, or another unique ID like employee number
+        name (str): username for identity
+        email (str): primary email for user
+        full_name (str): Display name for user
+        identity (str): unique identifier for user (may be same as username or email, or another unique ID like employee number)
 
     Attributes:
-        name (string): username for identity
-        email (string): primary email for user
-        full_name (string): display name for user
-        identity (string): unique identifier for user, may be same as username or email, or another unique ID like employee number
-        department (string): department name for user
-        is_active (boolean): if user is active, defaults to None
-        is_guest (boolean): if user is a guest type user, defaults to None
-        manager_id (string): Optional, CustomIdPUser.identity of manager, defaults to None
+        name (str): username for identity
+        email (str): primary email for user
+        full_name (str): display name for user
+        identity (str): unique identifier for user (may be same as username or email, or another unique ID like employee number)
+        department (str): department name for user
+        is_active (bool): if user is active, defaults to None
+        is_guest (bool): if user is a guest type user, defaults to None
+        manager_id (str, optional): CustomIdPUser.identity of manager, defaults to None
 
     """
 
@@ -1422,7 +1515,7 @@ class CustomIdPUser():
         self.__property_definitions = property_definitions
 
     def to_dict(self) -> dict:
-        """ function to prepare user entity for payload """
+        """ Function to prepare user entity for payload """
         user = {}
         user['name'] = self.name
         user['email'] = self.email
@@ -1446,8 +1539,11 @@ class CustomIdPUser():
         return user
 
     def set_source_identity(self, identity: str, provider_type: IdPProviderType) -> None:
-        """ Set an source external identity for user. Source identity will connect CustomIdP user to source IdP user.
-        Provider type limits scope for finding identity, can search all providers with `IdPProviderType.ANY`.
+        """ Set an source external identity for user.
+
+        - `source_identity` will connect CustomIdP user to a Veza graph IdP user.
+        - `provider_type` limits scope for finding matching IdP identities
+        - search all providers with `IdPProviderType.ANY`.
 
         Args:
             identity (str): Unique Identity of the source identity
@@ -1460,8 +1556,8 @@ class CustomIdPUser():
         self.__source_identity = {"identity": identity, "provider_type": provider_type}
         return None
 
-    def add_assumed_role_arns(self, arns: list[str]) -> None:
-        """ add AWS Roles to list of roles user can assume by arn
+    def add_assumed_role_arns(self, arns: List[str]) -> None:
+        """ Add AWS Roles to list of roles user can assume by ARN.
 
         Args:
             arns (list): list of role ARNs as strings that the user is allowed to assume
@@ -1477,8 +1573,8 @@ class CustomIdPUser():
 
         return
 
-    def add_groups(self, group_identities: list[str]) -> None:
-        """ add user to group(s) by group name
+    def add_groups(self, group_identities: List[str]) -> None:
+        """ Add user to group(s) by group name
 
         Args:
             group_identities (list): list of strings for group identities to add user to
@@ -1495,14 +1591,25 @@ class CustomIdPUser():
         return
 
     def set_property(self, property_name: str, property_value: any) -> None:
-        """ set a custom defined property for user. Property names are checked against defined custom properties
-        and will raise an exception if property name is not defined for user prior to calling `set_property`
+        """ Set custom property value for user.
+
+        Property name must be defined for users before calling `set_property()`. See example below and
+        `IdPPropertyDefinitions.define_user_property` for more information.
 
         Args:
             property_name (str): Name of property
             property_value (Any): Value for property, type should match OAAPropertyType for property definition
 
+        Raises:
+            OAATemplateException: If property with `property_name` is not defined.
+
+        Example:
+            >>> idp = CustomIdPProvider(name="Example IdP", idp_type="example", domain="example.com")
+            >>> idp.property_definitions.define_user_property(name="my_property", property_type=OAAPropertyType.STRING)
+            >>> user1 = idp.add_user(name="User 1")
+            >>> user1.set_property("my_property", "user1 value")
         """
+
         if not self.__property_definitions:
             raise OAATemplateException("No custom property definitions found for user")
 
@@ -1511,18 +1618,18 @@ class CustomIdPUser():
 
 
 class CustomIdPGroup():
-    """ Group model for CustomIdPProvider
+    """ Group model for CustomIdPProvider.
 
     Args:
-        name (string): name of group
-        full_name (string): optional full name for group
-        identity (string): optional identifier for group if name is not reference identifier
+        name (str): name of group
+        full_name (str): optional full name for group
+        identity (str): optional identifier for group if name is not reference identifier
 
     Parameters:
-        name (string): name of group
-        full_name (string): optional full name for group
-        identity (string): optional identifier for group, if None name is used as identity
-        is_security_group (boolean): Property for group, defaults to None (unset)
+        name (str): name of group
+        full_name (str): optional full name for group
+        identity (str): optional identifier for group, if None name is used as identity
+        is_security_group (bool): Property for group, defaults to None (unset)
 
     """
 
@@ -1539,7 +1646,7 @@ class CustomIdPGroup():
         self.__property_definitions = property_definitions
 
     def to_dict(self) -> None:
-        """ function to prepare user entity for payload """
+        """ Function to prepare user entity for payload. """
 
         group = {}
         group['name'] = self.name
@@ -1557,8 +1664,8 @@ class CustomIdPGroup():
 
         return group
 
-    def add_assumed_role_arns(self, arns: list[str]) -> None:
-        """ add AWS Roles to list of roles group members can assume by arn
+    def add_assumed_role_arns(self, arns: List[str]) -> None:
+        """ Add AWS Roles to list of roles group members can assume by ARN.
 
         Args:
             arns (list): list of role ARNs as strings that the group members are allowed to assume
@@ -1575,14 +1682,25 @@ class CustomIdPGroup():
         return
 
     def set_property(self, property_name: str, property_value: any) -> None:
-        """ set a custom defined property for group. Property names are checked against defined custom properties
-        and will raise an exception if property name is not defined for user prior to calling `set_property`
+        """ Set custom property value for group.
+
+        Property name must be defined for groups before calling `set_property()`. See example below and
+        `IdPPropertyDefinitions.define_group_property` for more information.
 
         Args:
             property_name (str): Name of property
             property_value (Any): Value for property, type should match OAAPropertyType for property definition
 
+        Raises:
+            OAATemplateException: If property with `property_name` is not defined.
+
+        Example:
+            >>> idp = CustomIdPProvider(name="Example IdP", idp_type="example", domain="example.com")
+            >>> idp.property_definitions.define_group_property(name="my_property", property_type=OAAPropertyType.STRING)
+            >>> group1 = idp.add_group(name="Group 1")
+            >>> group1.set_property("my_property", "group1 value")
         """
+
         if not self.__property_definitions:
             raise OAATemplateException("No custom property definitions found for group")
 
@@ -1593,8 +1711,8 @@ class CustomIdPGroup():
 class IdPPropertyDefinitions():
     """
     Model for defining custom properties for CustomIdPProvider and its entities (users, groups, domain).
-    Property definitions define the names for additional entity properties and the expected type.
 
+    Property definitions define the names for additional entity properties and the expected type.
 
     Attributes:
         domain_properties (dict): property definitions for IdP Domain
@@ -1610,7 +1728,7 @@ class IdPPropertyDefinitions():
         self.group_properties = {}
 
     def to_dict(self) -> dict:
-        """ returns custom idp property definitions """
+        """ Returns custom IdP property definitions. """
 
         return {"domain_properties": self.domain_properties,
                 "user_properties": self.user_properties,
@@ -1618,7 +1736,7 @@ class IdPPropertyDefinitions():
                 }
 
     def define_domain_property(self, name: str, property_type: OAAPropertyType) -> None:
-        """ define a domain custom property
+        """ Define a domain custom property.
 
         Args:
             name (str): name of property
@@ -1628,7 +1746,7 @@ class IdPPropertyDefinitions():
         self.domain_properties[name] = property_type
 
     def define_user_property(self, name: str, property_type: OAAPropertyType) -> None:
-        """ define a user custom property
+        """ Define a user custom property.
 
         Args:
             name (str): name of property
@@ -1638,7 +1756,7 @@ class IdPPropertyDefinitions():
         self.user_properties[name] = property_type
 
     def define_group_property(self, name: str, property_type: OAAPropertyType) -> None:
-        """ define a group custom property
+        """ Define a group custom property.
 
         Args:
             name (str): name of property
@@ -1648,8 +1766,9 @@ class IdPPropertyDefinitions():
         self.group_properties[name] = property_type
 
     def validate_property_name(self, property_name: str, entity_type: str) -> None:
-        """ validates that a property name has been defined for given idp entity. Raises exception if
-        property name has not been previously defined for entity
+        """ Validate that a property name has been defined for a given IdP entity.
+
+        Raises exception if property name has not been previously defined for entity
 
         Args:
             property_name (str): name of property to validate
@@ -1678,7 +1797,7 @@ class IdPPropertyDefinitions():
             raise OAATemplateException(f"unknown property name {property_name}")
 
     def __validate_types(self, name: str, property_type: OAAPropertyType) -> None:
-        """ helper function to validate that custom property parameters are of the correct types
+        """ Validate that custom property parameters are of the correct types (helper function).
 
         Args:
             name (str): name or property
@@ -1695,16 +1814,15 @@ class IdPPropertyDefinitions():
 # Shared models
 ###############################################################################
 class Tag():
-    """ Veza tag data model
+    """ Veza tag data model.
 
-        Args:
-            key (string): key for tag, aka name. Must be present and must be letters, numbers or _ (underscore) only.
-            value (string): Optional: value for tag, will appear in Veza as `key:value`. Must be letters, numbers or _ (underscore) only.
+    Args:
+        key (str): key for tag, aka name. Must be present and must be letters, numbers or _ (underscore) only.
+        value (str, optional): Value for tag, will appear in Veza as `key:value`. Must be letters, numbers or _ (underscore) only.
 
-         Attributes:
-            key (string): key for tag, aka name. Must be present and must be letters, numbers or _ (underscore) only.
-            value (string): Optional: value for tag, will appear in Veza as `key:value`. Must be letters, numbers and the special characters @,._ only.
-
+    Attributes:
+        key (str): key for tag, aka name. Must be present and must be letters, numbers or _ (underscore) only.
+        value (str): Value for tag, will appear in Veza as `key:value`. Must be letters, numbers and the special characters @,._ only.
     """
 
     def __init__(self, key: str, value: str = "") -> None:
@@ -1728,11 +1846,13 @@ class Tag():
 ###############################################################################
 
 def append_helper(base, addition):
-    """ helper function to simplify appending
-        handles multiple cases:
-         - base is None - starts a list
-         - addition is list - extends base with list
-         - addition is anything else - append element to list
+    """ Helper function to simplify appending.
+
+    Handles multiple cases:
+
+    - base is None: starts a list
+    - addition is list: extends base with list
+    - addition is anything else: append element to list
 
     Args:
         base (List or None): base list to append to, can be None

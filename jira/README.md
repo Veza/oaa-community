@@ -2,8 +2,6 @@
 
 Python connector for retrieving projects, groups, users, and permissions from Jira Cloud and submitting them to the Veza Open Authorization (OAA) API.
 
-For additional OAA documentation, see https://docks.veza.com/oaaf/
-
 ## Overview
 
 This connector connects to the Jira Cloud API using an API token.
@@ -18,15 +16,15 @@ Global permissions and project permissions are mapped for users and groups.
 The base URL for all Jira Cloud API interactions is `https://<your_instance_name>/rest/api/3`.
 The following table describes the API endpoints used by this connector.
 
-Endpoint                                 | Description                                         
+Endpoint                                 | Description
 -----------------------------------------|-----------------------------------------------------
-`group/bulk`                             | lists Jira Cloud groups                             
-`permissions`                            | lists Jira Cloud permissions                        
-`project/<project_key>/role`             | lists roles for the given project key               
+`group/bulk`                             | lists Jira Cloud groups
+`permissions`                            | lists Jira Cloud permissions
+`project/<project_key>/role`             | lists roles for the given project key
 `project/<project_key>/permissionscheme` | gets detailed permissions for the given project key
 `project/<project_key>/role/<role_id>`   | gets detailed membership for the given project role
-`project/search`                         | lists Jira Cloud projects                           
-`users/search`                           | lists Jira Cloud users                              
+`project/search`                         | lists Jira Cloud projects
+`users/search`                           | lists Jira Cloud users
 
 For more information, see the [Jira Cloud API Docmuentation](https://developer.atlassian.com/cloud/jira/platform/rest/v3/intro/#about)
 
@@ -35,7 +33,7 @@ For more information, see the [Jira Cloud API Docmuentation](https://developer.a
 This connector uses the generic OAA application template to map applications and identities to permissions.
 The following table shows how Generic Application entities correspond to Jira Cloud entities.
 
-Jira Cloud    | OAA Generic Application | Notes                                                 
+Jira Cloud    | OAA Generic Application | Notes
 --------------|-------------------------|-------------------------------------------------------
 group         | local group             |
 jira instance | application             |
@@ -68,7 +66,7 @@ Ensure that it is copied to a safe location before dismissing the dialog.
 
 This connector requires a valid Veza Push API token to interact with your Veza instance.
 
-1. Generate an API token for your Veza user. See [Veza User Guide](https://docs.veza.com/api/oaa#workflow) for detailed instructions
+1. Generate an API token for your Veza user. For detailed instructions consult the Veza User Guide.
 
 ## Running the Connector
 There are multiple options to run the connector. Instructions are included for running from the command line and building a Docker container. These instructions could be adapted

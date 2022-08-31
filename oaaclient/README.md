@@ -1,16 +1,24 @@
 # Python SDK for Veza Open Authorization API
 
-The `oaaclient` package provides types, functions, and a command-line interface for the [Open Authorization API](https://github.com/Veza/oaa-community). You can use it to format and publish user, resource, and authorization metadata for processing by a Veza instance.
+The `oaaclient` package provides data models, methods and a command-line interface for using the [Open Authorization API](https://github.com/Veza). You can use it to format and publish user, resource, and authorization metadata for processing by a Veza instance.
 
 For example usage, please see the `samples` directory.
+
+### What is OAA?
+
+The Open Authorization API is used to submit authorization metadata for custom applications to a Veza instance for parsing and inclusion in the Entity Catalog.
+
+- A typical OAA-based integration will use APIs to query the source application for information about users, resources, and permissions, along with other authorization entities such as groups and roles.
+- This data payload is published to Veza as a JSON object. The `oaaclient` modules simplify building the required JSON model and pushing the payload to Veza via the REST API.
+- Any application or identity provider added using OAA becomes fully available for search, rules and alerts, and access reviews, similar to any officially-supported integration.
 
 ## Using the SDK
 
 The `oaaclient` SDK includes the following components:
 
-* `[oaaclient.client](./oaaclient/client.py)`: Veza API communication (data provider management, payload push, etc.). Requires an API key for authentication.
-* `[oaaclient.templates](oaaclient/templates.py)`: Classes for modeling and generating OAA payload.
-* `[oaaclient.utils](oaaclient/utils.py)`: Additional utility functions.
+- `oaaclient.client`: Veza API communication (data provider management, payload push, etc.). Requires an API key for authentication.
+- `oaaclient.templates`: Classes for modeling and generating an OAA payload.
+- `oaaclient.utils`: Additional utility functions (icon encoding, etc.).
 
 ### Sample Workflow
 
@@ -72,13 +80,38 @@ You will need the following JSON files:
 
 Once the above files are created, the payload can be pushed with the following command:
 
-```bash
+```shell
 oaaclient  --provider provider.json --auth auth.json payload.json
 ```
 
 The client will read the files and push the payload to Veza. The client will automatically create any required custom provider and data sources.
 
+## Handling Errors
+
+The `OAAClient` class handles API connections to Veza. If there are errors connecting or the API returns errors
+`OAAClient` will raise an `OAAClientError` exception. If the payload does not conform to the template requirements the
+`OAAClientError.details` will contain a list of any issues encountered.
+
+```python
+    try:
+        response = veza_con.push_application(provider_name=provider_name,
+                                             data_source_name=data_source_name,
+                                             application_object=custom_app,
+                                            )
+        if response.get("warnings"):
+            print("Push succeeded with warnings:")
+            for w in response["warnings"]:
+                print(w)
+    except OAAClientError as e:
+        print(f"Error: {e.error}: {e.message} ({e.status_code})", file=sys.stderr)
+        if hasattr(e, "details"):
+            for d in e.details:
+                print(d, file=sys.stderr)
+```
+
 ## Additional documentation
+
+Since any given source application or service will have different methods for retrieving entities, authorization, and other required metadata, each OAA connector will be slightly different. You should consult the API documentation for your application when considering how you will source the information, and refer to existing Veza-supported OAA connectors for real-world examples.
 
 Connector source code and `oaaclient` modules are thoroughly annotated, for reference when building your own integrations.
 

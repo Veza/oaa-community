@@ -1,23 +1,26 @@
 #!env python3
 """
+Uses the `CustomIdPProvider` class to model an OAA Custom Identity Provider.
+
+To run the code, you will need to export environment variables for the Veza URL,
+user and API keys.
+
+Since the example includes fake AWS ARNs that Veza will not have discovered, the expected output will
+contain warnings like "Cannot find IAM role by names ..."
+
+Example:
+    ```
+    export VEZA_API_KEY="xxxxxxx"
+    export VEZA_URL="https://myveza.vezacloud.com"
+    ./sample-idp.py
+    ```
+
 Copyright 2022 Veza Technologies Inc.
 
 Use of this source code is governed by the MIT
 license that can be found in the LICENSE file or at
 https://opensource.org/licenses/MIT.
 
-Example of using the `CustomIdPProvider` class to model an identity provider as a source of users.
-
-If you want to run the code you will need to export environment variables for the Veza URL, user and API keys.
-
-```
-export VEZA_API_KEY="xxxxxxx"
-export VEZA_URL="https://myveza.vezacloud.com"
-./sample-idp.py
-```
-
-Since the example includes fake AWS ARNs that Veza will not have discovered the expected output will
-contain warning like "Cannot find IAM role by names ..."
 """
 
 from oaaclient.client import OAAClient, OAAClientError

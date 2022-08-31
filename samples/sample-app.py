@@ -1,21 +1,24 @@
 #!env python3
-"""
+"""Uses the `CustomApplication` class to create an OAA Custom application.
+
+Creates local users, groups assignments, and maps permissions to the application
+and resources.
+
+To run the code, you will need to export environment variables for the Veza URL,
+user and API keys.
+
+Example:
+    ```
+    export OAA_TOKEN="xxxxxxx"
+    export VEZA_URL="https://myveza.vezacloud.com"
+    ./sample-app.py
+    ```
+
 Copyright 2022 Veza Technologies Inc.
 
 Use of this source code is governed by the MIT
 license that can be found in the LICENSE file or at
 https://opensource.org/licenses/MIT.
-
-Example of using the `CustomApplication` class to model a typical application where users and groups are assigned
-permissions to the application or resources.
-
-If you want to run the code you will need to export environment variables for the Veza URL, user and API keys.
-
-```
-export OAA_TOKEN="xxxxxxx"
-export VEZA_URL="https://myveza.vezacloud.com"
-./sample-app.py
-```
 
 """
 
@@ -46,7 +49,7 @@ def main():
     # You can use the same type for multiple applications
     custom_app = CustomApplication(name="Sample App", application_type="sample")
 
-    # In the OAA payload, each permission native to the custom app is mapped to the Veza effective permission (data/nondata C/R/U/D).
+    # In the OAA payload, each permission native to the custom app is mapped to the Veza effective permission (data/non-data C/R/U/D).
     # Permissions must be defined before they can be referenced, as they are discovered or ahead of time.
     # For each custom application permission, bind them to the Veza permissions using the `OAAPermission` enum:
     custom_app.add_custom_permission("admin", [OAAPermission.DataRead, OAAPermission.DataWrite])
@@ -87,11 +90,11 @@ def main():
     # For each Identity (user, group, IdP) assign permissions to the application or resource.
     # The identities (users, groups) permissions and resources must already be defined
 
-    # To add a permision directly to the application use `apply_to_application=True`
+    # To add a permission directly to the application use `apply_to_application=True`
     custom_app.local_users["bob"].add_permission(permission="operator", apply_to_application=True)
     custom_app.local_groups["admins"].add_permission(permission="admin",  apply_to_application=True)
 
-    # You can describe specific permissions to invidivual resources or subresources:
+    # You can describe specific permissions to individual resources or sub-resources:
     custom_app.local_users["yan"].add_permission(permission="operator", resources=[entity1, child1])
 
     # Authorization can also be created directly for an IdP identity
@@ -120,14 +123,16 @@ def main():
                                                save_json=False
                                                )
         if response.get("warnings", None):
-            # Veza may return warnings on a succesfull uploads. These are informational warnings that did not stop the processing
+            # Veza may return warnings on a successful uploads. These are informational warnings that did not stop the processing
             # of the OAA data but may be important. Specifically identities that cannot be resolved will be returned here.
             print("-- Push succeeded with warnings:")
             for e in response["warnings"]:
                 print(f"  - {e}")
     except OAAClientError as e:
+        # If there are any errors connecting to the Veza API or processing the payload the client will raise an `OAAClientError`
         print(f"-- Error: {e.error}: {e.message} ({e.status_code})", file=sys.stderr)
         if hasattr(e, "details"):
+            # Error details will have specifics on any issues encountered processing the payload
             for d in e.details:
                 print(f"  -- {d}", file=sys.stderr)
     return

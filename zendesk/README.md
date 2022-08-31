@@ -11,7 +11,7 @@ This connector uses the Zendesk API to retrieve the lists of users and map out t
 This connector uses the OAA Application template to map applications and identities to permissions. The following table shows how Custom Application entities correspond to Zendesk entities:
 
 Zendesk         | Generic Application
-----------------|--------------------
+--------------- | -------------------
 Zendesk Account | Application
 User            | local user
 Group           | local user
@@ -37,7 +37,7 @@ Group:
 1. Generate a Zendesk API key for a user with sufficient privileges to see all users. See [Zendesk Help ](https://support.zendesk.com/hc/en-us/articles/4408889192858-Generating-a-new-API-token) for complete steps.
 
 ### Veza Setup Instructions
-1. Generate an API key for your Veza user. See [Veza User Guide](https://app.gitbook.com/@veza.com/s/user-guide/interface-overview/administration/api-keys) for detailed instructions.
+1. Generate an API key for your Veza user. API keys can be managed in the Veza interface under Administration -> API Keys. For detailed instructions consult the Veza User Guide.
 
 ### Command Line
 1. With Python 3.8+ install the requirements either into a virtual environment or to the system:
@@ -59,11 +59,11 @@ Group:
 
 #### Parameters
 Parameter        | Environment Variable Name | Value
------------------| --------------------------|---------------------------------------------------------------
+---------------- | ------------------------- | -------------------------------------------------------------
 `--zendesk-url`  | `ZENDESK_URL`             | URL of Zendesk Account
-`--zendesk-user` | `ZENDESK_USER`            | Username of the Zendesk account the API key was generated for  
-`n/a`            | `ZENDESK_API_KEY`         | API key generated for Zendesk  
-`--veza-url`   | `VEZA_URL`              | URL of Veza deployment  
-`n/a`            | `VEZA_API_KEY`          | API key generated for Veza
-`--verbose`      | `n/a`                     | Optional, enable verbose output and debug information  
-`--save-json`    | `n/a`                     | Optional, save OAA payload to JSON file locally for debugging  
+`--zendesk-user` | `ZENDESK_USER`            | Username of the Zendesk account the API key was generated for
+`n/a`            | `ZENDESK_API_KEY`         | API key generated for Zendesk
+`--veza-url`     | `VEZA_URL`                | URL of Veza deployment
+`n/a`            | `VEZA_API_KEY`            | API key generated for Veza
+`--verbose`      | `n/a`                     | Optional, enable verbose output and debug information
+`--save-json`    | `n/a`                     | Optional, save OAA payload to JSON file locally for debugging

@@ -37,7 +37,7 @@ The following properties are collect by the connector:
 1. Generate a General Access REST API key with read-only permission following the [PagerDuty documentation](https://support.pagerduty.com/docs/api-access-keys#section-generate-a-general-access-rest-api-key)
 
 ### Veza Setup Instructions
-1. Generate an API key for your Veza user. See Veza User Guide for detailed instructions.
+1. Generate an API key for your Veza user. API keys can be managed in the Veza interface under Administration -> API Keys. For detailed instructions consult the Veza User Guide.
 
 ## Running from Command Line
 1. With Python 3.8+ install the requirements

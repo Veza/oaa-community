@@ -57,7 +57,7 @@ overview and instructions for how to use the connector. Download the code and fo
 connector in your application.
 
 To get started developing your own connectors:
-* Read the [OAA documentation](https://docs.veza.com/api/oaa)
+* Consult the Open Authorization API section of the Veza User Guide
 * See the samples directory:
   * `sample-app.py` - sample generic application, suitable for most apps.
   * `sample-idp.py` - sample custom identity provider, for IdPs and other identity related services
@@ -74,6 +74,7 @@ GitHub     | Veza Supported | Python   | Support for GitHub Cloud for discovery 
 GitLab     | Veza Supported | Python   | Discovery for GitLab project permissions
 Jira       | Veza Supported | Python   | Jira Cloud support for projects
 Looker     | Veza Supported | Python   | Looker User authorization for models and connections
+PagerDuty  | Veza Supported | Python   | PagerDuty user roles and teams
 Salesforce | Veza Supported | Python   | User role and permission assignments for Salesforce
 Zendesk    | Veza Supported | Python   | Zendesk user to role assignments
 

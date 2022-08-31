@@ -1,5 +1,8 @@
 #!env python3
 """
+
+Classes for calling Veza APIs and managing OAA providers and data sources.
+
 Copyright 2022 Veza Technologies Inc.
 
 Use of this source code is governed by the MIT
@@ -9,6 +12,7 @@ https://opensource.org/licenses/MIT.
 
 from datetime import datetime
 from enum import Enum
+from requests.exceptions import JSONDecodeError as RequestsJSONDecodeError
 from typing import Union, List
 import argparse
 import base64
@@ -19,19 +23,18 @@ import os
 import re
 import requests
 import sys
-from requests.exceptions import JSONDecodeError as RequestsJSONDecodeError
 
 from oaaclient.templates import CustomApplication, CustomIdPProvider
 import oaaclient.utils as oaautils
+
 PROVIDER_ICON_MAX_SIZE = 64_000
 
 log = logging.getLogger(__name__)
 
 class OAAClientError(Exception):
-    """Error raised by OAAClient
+    """Error raised by OAAClient.
 
-    OAAClientError is raised if there are issues connecting to the OAA API or if the API returns an error from
-    the command.
+    Raised for issues connecting to the OAA API and when the API returns an error.
 
     Args:
         error (str): short string for error message
@@ -52,7 +55,7 @@ class OAAClientError(Exception):
 
 
 class OAAClient():
-    """OAA API Connection and Management
+    """OAA API Connection and Management.
 
     Tools for making the API calls to Veza for OAA related operations. Manages Providers, Datasources and can push OAA
     payloads from JSON or template apps.
@@ -104,7 +107,7 @@ class OAAClient():
         providers = self.get_provider_list()
 
     def get_provider_list(self) -> List[dict]:
-        """Return list of Providers
+        """Return list of Providers.
 
         Returns:
             list[dict]: Returns a list of existing Providers as dictionaries
@@ -113,7 +116,7 @@ class OAAClient():
         return providers['values']
 
     def get_provider(self, name: str) -> dict:
-        """Get Provider by name
+        """Get Provider by name.
 
         Args:
             name (str): name of Provider
@@ -130,7 +133,15 @@ class OAAClient():
 
         return provider
 
-    def get_provider_by_id(self, provider_id):
+    def get_provider_by_id(self, provider_id: str) -> dict:
+        """Get provider by UUID identifier.
+
+        Args:
+            provider_id (str): Unique UUID identifier for provider
+
+        Returns:
+            dict: dictionary representation of Provider or None
+        """
         try:
             response = self.__perform_get("/api/v1/providers/custom/{provider_id}")
         except OAAClientError as e:
@@ -142,15 +153,14 @@ class OAAClient():
         return response
 
     def create_provider(self, name: str, custom_template: str, base64_icon: str = None) -> dict:
-        """Create a new Provider
+        """Create a new Provider.
 
         Creates a new Provider with the given name. An error will be raised in there is Provider naming conflict
-        already exists.
 
         Args:
             name (str): new Provider name
             custom_template (str): the OAA template to use for the Provider (e.g. "application")
-            base64_icon (str): Optional, Base64 encoded string of icon to set for Provider
+            base64_icon (str, optional): Base64 encoded string of icon to set for Provider. Defaults to None.
 
         Returns:
             dict: dictionary representing the created Provider
@@ -172,6 +182,9 @@ class OAAClient():
             provider_id (str): unique ID of existing provider
             base64_icon (str): base64 encoded string of new icon
 
+        Raises:
+            ValueError: If icon size exceeds maximum allowed size
+
         """
         if sys.getsizeof(base64_icon) > PROVIDER_ICON_MAX_SIZE:
             raise ValueError("Max icon size of 64KB exceeded")
@@ -185,7 +198,7 @@ class OAAClient():
         return None
 
     def delete_provider(self, provider_id: str) -> dict:
-        """Delete an existing provider by ID
+        """Delete an existing provider by ID.
 
         Deleting a provider will delete all its datasources and historical data. Deleting a provider is a background operation that will
         complete after API response is returned.
@@ -201,9 +214,10 @@ class OAAClient():
 
 
     def get_data_sources(self, provider_id: str) -> List[dict]:
-        """Get Data Sources for Provider by ID
+        """Get Data Sources for Provider by ID.
 
         Get the list of existing Data Sources, filtered by Provider UUID.
+
         Args:
             provider_id (str): ID of Provider
         Returns:
@@ -213,7 +227,7 @@ class OAAClient():
         return response['values']
 
     def get_data_source(self, name:str, provider_id:str) -> dict:
-        """Get Provider's Data Source by name
+        """Get Provider's Data Source by name.
 
         Find a Data Source from a specific provider based on the name of the Data Source
 
@@ -234,7 +248,7 @@ class OAAClient():
         return data_source
 
     def create_data_source(self, name: str, provider_id: str) -> dict:
-        """Create a new Data Source for the given Provider ID
+        """Create a new Data Source for the given Provider ID.
 
         Args:
             name (str): Name for new Data Source
@@ -247,11 +261,13 @@ class OAAClient():
         return datasource['value']
 
     def create_datasource(self, name, provider_id):
-        """ legacy function for backwards compatibility """
+        """ Legacy function for backwards compatibility
+        ..Deprecated::
+        """
         return self.create_data_source(name, provider_id)
 
     def delete_data_source(self, data_source_id: str, provider_id: str) -> dict:
-        """Delete existing Data Source by ID
+        """Delete existing Data Source by ID.
 
         Deleting a Data Source will delete all entity data from the Data Source
 
@@ -260,13 +276,13 @@ class OAAClient():
             provider_id (str): ID of Provider for Data Source
 
         Returns:
-            dict: _description_
+            dict: API response
         """
         response = self.__perform_delete(f"/api/v1/providers/custom/{provider_id}/datasources/{data_source_id}")
         return response
 
     def push_metadata(self, provider_name: str, data_source_name: str, metadata: dict, save_json: bool = False) -> dict:
-        """Push an OAA payload dictionary to Veza
+        """Push an OAA payload dictionary to Veza.
 
         Publishes the supplied `metadata` dictionary representing an OAA payload to the specified provider and
         data source. The function will create a new data source if it does not already exist, but requires the Provider to be
@@ -327,13 +343,13 @@ class OAAClient():
         return result
 
     def push_application(self, provider_name: str, data_source_name: str, application_object: Union[CustomApplication, CustomIdPProvider], save_json=False) -> dict:
-        """Push an OAA Application Object (such as CustomApplication)
+        """Push an OAA Application Object (such as CustomApplication).
 
         Extract the OAA JSON payload from the supplied OAA class (e.g. CustomApplication, CustomIdPProvider) and push to
         the supplied Data Source.
 
         The Provider must be a valid Provider (created ahead of time). A new data source will be created
- if it does not already exist.
+        if it does not already exist.
 
         Optional flag `save_json` will write the payload to a local file before push for log or debug. Output file name
         is formatted with a timestamp: `{data source name}-{%Y%m%d-%H%M%S}.json`
@@ -354,15 +370,14 @@ class OAAClient():
         return self.push_metadata(provider_name, data_source_name, metadata, save_json=save_json)
 
     def api_get(self, api_path: str) -> Union[list, dict]:
-        """Perform Veza API GET operation
+        """Perform Veza API GET operation.
 
         Call GET on supplied API path for the Veza instance and return the results. Results of API will either be list or
         dictionary depending on if the API destination.
 
-        For API endpoints that return a list like `/api/v1/providers/custom` function will return a list of entities or an
+        - For API endpoints that return a list like `/api/v1/providers/custom` function will return a list of entities or an
         empty list if the API returns no results.
-
-        For API endpoints that are a specific ID such as `/api/v1/providers/custom/<uuid>` function will return the
+        - For API endpoints that are a specific ID such as `/api/v1/providers/custom/<uuid>` function will return the
         dictionary result of the JSON returned by the API.
 
         Args:
@@ -391,13 +406,13 @@ class OAAClient():
                 log.error("Unable to process API error response as JSON, raising generic response")
                 raise OAAClientError("ERROR", response.reason, response.status_code)
             # process JSON response
-            message = error.get("message", "Unknown error durring GET")
+            message = error.get("message", "Unknown error during GET")
             code = error.get("code", "UNKNOWN")
             raise OAAClientError(code, message, status_code=response.status_code, details=error.get("details", []))
 
 
     def api_post(self, api_path: str, data: dict) -> dict:
-        """Perform Veza API POST operation
+        """Perform Veza API POST operation.
 
         Call POST on the supplied Veza instance API path, including the data payload. The API response will be returned as
         dictionary.
@@ -431,14 +446,14 @@ class OAAClient():
                 log.error("Unable to process API error response as JSON, raising generic response")
                 raise OAAClientError("ERROR", f"{response.reason} - {response.url}", status_code=response.status_code)
             # process JSON response
-            message = error.get("message", "Unknown error durring POST")
+            message = error.get("message", "Unknown error during POST")
             code = error.get("code", "UNKNOWN")
             raise OAAClientError(code, message, status_code=response.status_code, details=error.get("details", []))
 
 
 
     def api_delete(self, api_path:str) -> dict:
-        """Perform REST API DELETE operation
+        """Perform REST API DELETE operation.
 
         Args:
             api_path (str): API Path API path relative to Veza URL
@@ -463,7 +478,7 @@ class OAAClient():
                 log.error("Unable to process API error response as JSON, raising generic response")
                 raise OAAClientError("ERROR", f"{response.reason} - {response.url}", response.status_code)
             # process JSON response
-            message = error.get("message", "Unknown error durring DELETE")
+            message = error.get("message", "Unknown error during DELETE")
             code = error.get("code", "UNKNOWN")
             raise OAAClientError(code, message, status_code=response.status_code, details=error.get("details", []))
 

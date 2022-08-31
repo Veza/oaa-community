@@ -13,7 +13,7 @@ to the template.
 Looker     | OAA Application
 ---------- | -----------------
 Users      |  Local User
-Group      |  Local Group  
+Group      |  Local Group
 Role       |  Local Role
 Model Set  |  Custom Resource `model_set`
 Model      |  Custom Sub-resource `model` under `model_set`
@@ -46,7 +46,7 @@ Connection:
 ## Setup
 ### Prerequisite
 1. Generate a Looker API3 key for a user with sufficient privileges to see all users, roles and models.
-2. Generate a Veza API key. See [Veza User Guide](https://app.gitbook.com/@veza.com/s/user-guide/interface-overview/administration/api-keys) for detailed instructions.
+2. Generate an API key for your Veza user. API keys can be managed in the Veza interface under Administration -> API Keys. For detailed instructions consult the Veza User Guide.
 
 ### Command Line
 1. With Python 3.8+ install the requirements either into a virtual environment or otherwise:
@@ -59,7 +59,7 @@ Connection:
     ```
     export VEZA_API_KEY="XXXX...."
     export LOOKERSDK_BASE_URL="https://<customername>.cloud.looker.com"
-    export LOOKERSDK_CLIENT_ID="XXXX...."  
+    export LOOKERSDK_CLIENT_ID="XXXX...."
     export LOOKERSDK_CLIENT_SECRET="XXXXX....."
     ```
 3. Run the connector

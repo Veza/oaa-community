@@ -87,7 +87,7 @@ If an appropriate user and Permissions Set with API access enabled already exist
   * Click **Save**
 
 ### Veza Prerequisites
-1. Generate an [API key](https://docs.veza.com/api/authentication) for your Veza user.
+1. Generate an API key for your Veza user. API keys can be managed in the Veza interface under Administration -> API Keys. For detailed instructions consult the Veza User Guide.
 
 ### Command Line
 1. Ensure `pip` is up-to-date; dependencies will fail to install unless `pip >= 21.0`

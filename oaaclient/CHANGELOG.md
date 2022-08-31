@@ -49,7 +49,7 @@
 
 ## 2022/06/23
 
-* Added `client.delete_provider()` and `client.delete_data_source()` functions
+* Added `OAAClient.delete_provider()` and `OAAClient.delete_data_source()` functions
 
 ## 2022/05/25
 
@@ -80,7 +80,7 @@
 
 ## 2022/3/22
 
-* The `CustomApplication` class now supports [custom entity properties](https://docs.veza.com/api/oaa/custom-properties) introduced in Veza `2022.2.2`.
+* The `CustomApplication` class now supports custom entity properties introduced in Veza `2022.2.2`.
   * Any applications that utilized `dynamic_properties` (`One`, `Two`, `Three` etc.) will need to be updated to use the latest SDK
 
   Old method:

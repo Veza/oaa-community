@@ -1,4 +1,7 @@
 """
+
+`oaaclient` utility functions.
+
 Copyright 2022 Veza Technologies Inc.
 
 Use of this source code is governed by the MIT

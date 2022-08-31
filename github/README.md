@@ -2,8 +2,6 @@
 
 Python connector to query Github organization members and repositories and push authorization data using the Open Authorization API.
 
-For additional OAA documentation, see the [Veza User Guide](https://docs.veza.com/oaa/)
-
 ## Overview
 
 This connector utilizes the Github API using a Github App for authorization. The Github App must be created and configured for the target organization (steps below) prior to running.
@@ -90,7 +88,7 @@ local user will still be created.
 1. Install the App into the Organization(s).
 
 ### Veza Setup Instructions
-1. Generate an API key for your Veza user. See [Veza User Guide](https://docs.veza.com/interface-overview/administration/api-keys) for detailed instructions.
+1. Generate an API key for your Veza user. API keys can be managed in the Veza interface under Administration -> API Keys. For detailed instructions consult the Veza User Guide.
 
 ## Running
 

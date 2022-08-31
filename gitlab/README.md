@@ -2,8 +2,6 @@
 
 Python connector for querying GitLab deployment to discover users and projects. Provides authorization data for each projects users.
 
-For additional OAA documentation, see the [Veza User Guide](https://docs.veza.com/oaa/)
-
 ## Overview
 
 This connector authenticates to the GitLab deployment using a read-only access token for an admin user to discover all users, groups and projects configured on the deployment. Each user's access (if access is allowed) to projects is determined based on their group memberships, direct assignments and visibility properties of the project.
@@ -26,14 +24,14 @@ project | Application Resource
 Entity  | Property        | Values
 ------- |---------------- |-------
 User    | `bot`           | Boolean for bot users
-User    | `gitlab_id`     |  Unique GitLab user ID number  
-User    | `is_licensed`   | State of GitLab license usage  
+User    | `gitlab_id`     |  Unique GitLab user ID number
+User    | `is_licensed`   | State of GitLab license usage
 User    | `state`         | Account state `active`, `blocked`, `deactivated`
-User    | `is_active`     | True if account state is `active`  
-User    | `created_at`    | Time user account was created  
-User    | `last_login_at` | Time of last user login to GitLab  
+User    | `is_active`     | True if account state is `active`
+User    | `created_at`    | Time user account was created
+User    | `last_login_at` | Time of last user login to GitLab
 Project | `visibility`    | Project visibility, `private`, `internal`, `public`
-Project | `gitlab_id`     |  Unique GitLab project ID number  
+Project | `gitlab_id`     |  Unique GitLab project ID number
 
 ### Limitations
 * Based on API limitations project discovery is limited to 50,000 projects.
@@ -49,7 +47,7 @@ Project | `gitlab_id`     |  Unique GitLab project ID number
 * Save the generated token
 
 ### Veza Setup Instructions
-1. Generate an API key for your Veza user. See [Veza User Guide](https://app.gitbook.com/@veza.com/s/user-guide/interface-overview/administration/api-keys) for detailed instructions.
+1. Generate an API key for your Veza user. API keys can be managed in the Veza interface under Administration -> API Keys. For detailed instructions consult the Veza User Guide.
 
 ### Command Line
 1. With Python 3.8+ install the requirements either into a virtual environment or otherwise:

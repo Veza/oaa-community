@@ -68,15 +68,16 @@ To get started developing your own connectors:
 The Community repository includes the following existing connectors, each connector is in its own directory with
 instructions.
 
-Connector  | Support Level  | Language | Notes
------------|----------------|----------|-----------------------------------------------------------------------------
-GitHub     | Veza Supported | Python   | Support for GitHub Cloud for discovery organization's repository permissions
-GitLab     | Veza Supported | Python   | Discovery for GitLab project permissions
-Jira       | Veza Supported | Python   | Jira Cloud support for projects
-Looker     | Veza Supported | Python   | Looker User authorization for models and connections
-PagerDuty  | Veza Supported | Python   | PagerDuty user roles and teams
-Salesforce | Veza Supported | Python   | User role and permission assignments for Salesforce
-Zendesk    | Veza Supported | Python   | Zendesk user to role assignments
+Connector       | Support Level  | Language | Notes
+----------------|----------------|----------|-----------------------------------------------------------------------------
+BitBucket Cloud | Veza Supported | Python   | Bitbucket Cloud connector repository permissions
+GitHub          | Veza Supported | Python   | Support for GitHub Cloud for discovery organization's repository permissions
+GitLab          | Veza Supported | Python   | Discovery for GitLab project permissions
+Jira            | Veza Supported | Python   | Jira Cloud support for projects
+Looker          | Veza Supported | Python   | Looker User authorization for models and connections
+PagerDuty       | Veza Supported | Python   | PagerDuty user roles and teams
+Salesforce      | Veza Supported | Python   | User role and permission assignments for Salesforce
+Zendesk         | Veza Supported | Python   | Zendesk user to role assignments
 
 ### Support Levels
 #### Veza Supported

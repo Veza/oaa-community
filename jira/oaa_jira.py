@@ -11,6 +11,7 @@ from oaaclient.client import OAAClient, OAAClientError
 from oaaclient.templates import CustomApplication, OAAPermission, OAAPropertyType
 from requests.auth import HTTPBasicAuth
 from requests.exceptions import HTTPError
+from urllib.parse import urlparse
 import argparse
 import json
 import logging
@@ -61,6 +62,8 @@ class JiraAPI():
       self.base_url = f"{url}/rest/api/3"
     else:
       self.base_url = f"https://{url}/rest/api/3"
+
+    self.jira_instance = urlparse(self.base_url).netloc
     self.username = username
     self.token = token
 
@@ -268,6 +271,9 @@ def process_project(jira_con, oaa_app, project, project_roles, project_permissio
   # build a dict of {project_id: {details}} to aggregate group permissions
   groups_to_permissions = {}
 
+  # track a list of unknown holder types to only log once per type
+  unknown_holder_types = []
+
   for permission in project_permission_scheme.get("permissions"):
     if "holder" not in permission:
       # no users/groups attached to the role - skip
@@ -276,6 +282,10 @@ def process_project(jira_con, oaa_app, project, project_roles, project_permissio
     permission_name         = permission.get("permission")
     permission_holder       = permission.get("holder")
     permission_holder_type  = permission_holder.get("type")
+
+    if permission_name not in oaa_app.custom_permissions:
+      log.info(f"Creating permission {permission_name}")
+      oaa_app.add_custom_permission(permission_name, parse_permissions(permission_name))
 
     if permission_holder_type == "projectRole":
       role_id = permission_holder.get("projectRole").get("id")
@@ -303,8 +313,9 @@ def process_project(jira_con, oaa_app, project, project_roles, project_permissio
       # TODO: implement
       pass
 
-    else:
-      log.warning(f"Unknown permission holder type {permission_holder_type} for permission {permission_name} in project {project.get('name')}")
+    elif permission_holder_type not in unknown_holder_types:
+        log.warning(f"Unknown permission holder type {permission_holder_type} in project {project.get('name')}")
+        unknown_holder_types.append(permission_holder_type)
 
   # iterate the groups_to_permissions dict and add authorization to the groups
   for group in groups_to_permissions:
@@ -316,7 +327,7 @@ def process_project(jira_con, oaa_app, project, project_roles, project_permissio
 
     for permission in groups_to_permissions[group].get("permissions"):
         if permission not in oaa_app.custom_permissions:
-            log.info(f"Creating permission on the fly {permission}")
+            log.info(f"Creating permission {permission}")
             oaa_app.add_custom_permission(permission, parse_permissions(permission))
 
     # create a local role (project_id-group_name)
@@ -469,7 +480,7 @@ def main():
   # Instantiate an OAA Client, do this early to validate connection before processing application
   veza_con = OAAClient(url=veza_url, api_key=veza_api_key)
 
-  oaa_app = CustomApplication(name="Jira - Vezaai", application_type="Jira")
+  oaa_app = CustomApplication(name=f"Jira - {jira_con.jira_instance}", application_type="Jira")
 
   try:
     test_call = jira_con.api_get("/permissions")

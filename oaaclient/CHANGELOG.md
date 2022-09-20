@@ -1,5 +1,9 @@
 # OAA Client Change Log
 
+## 2022/09/20
+
+* Increase timeout on delete API operations
+
 ## 2022/08/16
 
 * Payload compression is now enabled by default. Added more detailed logging and exception when prepared payload size will exceed 100MB.

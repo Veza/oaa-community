@@ -21,19 +21,14 @@ from oaaclient.client import OAAClient, OAAClientError
 from generate_app import generate_app
 from generate_idp import generate_idp
 
-@pytest.fixture
-def veza_con():
-    test_deployment = os.getenv("PYTEST_VEZA_HOST")
-    test_api_key = os.getenv("VEZA_API_KEY")
-    assert test_api_key is not None
-
-    veza_con = OAAClient(url=test_deployment, token=test_api_key)
-
-    return veza_con
 
 @pytest.mark.skipif(not os.getenv("PYTEST_VEZA_HOST"), reason="Test host is not configured")
 def test_client_provider(veza_con):
-    """ tests for client provider management code using live API """
+    """ tests for client provider management code using live API
+
+    Does not use the app_provider fixture since this includes all the additional validations
+    and tests around provider create/delete behavior
+    """
     test_uuid = uuid.uuid4()
     provider_name = f"Pytest-{test_uuid}"
 

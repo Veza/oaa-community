@@ -21,33 +21,20 @@ from generate_app_id_mapping import generate_app_id_mapping
 # set the timeout for the push tests, if the the datasource does not parse
 TEST_TIMEOUT = os.getenv("OAA_PUSH_TIMEOUT", 300)
 
-@pytest.fixture
-def veza_con():
-    test_deployment = os.getenv("PYTEST_VEZA_HOST")
-    test_api_key = os.getenv("VEZA_API_KEY")
-    assert test_api_key is not None
-
-    veza_con = OAAClient(url=test_deployment, token=test_api_key)
-
-    return veza_con
 
 @pytest.mark.skipif(not os.getenv("PYTEST_VEZA_HOST"), reason="Test host is not configured")
 @pytest.mark.timeout(TEST_TIMEOUT)
-def test_payload_push(veza_con):
+def test_payload_push(veza_con, app_provider):
     # make sure compression is disabled
     veza_con.enable_compression = False
     app = generate_app()
-    provider_name = f"Pytest Custom Apps {uuid.uuid4()}"
-    data_source_name = "pytest-test_payload_push"
-    provider = veza_con.get_provider(provider_name)
-    assert provider is None
 
-    provider = veza_con.create_provider(provider_name, "application")
+    data_source_name = os.environ.get('PYTEST_CURRENT_TEST').replace("/", "-")
 
     b64_icon = utils.encode_icon_file("tests/oaa_icon.png")
-    veza_con.update_provider_icon(provider_id=provider['id'], base64_icon=b64_icon)
+    veza_con.update_provider_icon(provider_id=app_provider['id'], base64_icon=b64_icon)
 
-    response = veza_con.push_application(provider_name,
+    response = veza_con.push_application(app_provider['name'],
                                            data_source_name=data_source_name,
                                            application_object=app
                                            )
@@ -61,36 +48,30 @@ def test_payload_push(veza_con):
     for warning in response["warnings"]:
         assert warning['message'].startswith("Cannot find identity by names")
 
-    data_source = veza_con.get_data_source(data_source_name, provider_id=provider["id"])
+    data_source = veza_con.get_data_source(data_source_name, provider_id=app_provider["id"])
     while True:
-        data_source = veza_con.get_data_source(data_source_name, provider_id=provider["id"])
+        data_source = veza_con.get_data_source(data_source_name, provider_id=app_provider["id"])
         if data_source["status"] == "PENDING":
-            time.sleep(2)
+            time.sleep(4)
         elif data_source["status"] == "SUCCESS":
             break
         else:
             print(data_source)
             assert False, "Datasource parsing failure"
 
-    veza_con.delete_provider(provider["id"])
 
 @pytest.mark.skipif(not os.getenv("PYTEST_VEZA_HOST"), reason="Test host is not configured")
 @pytest.mark.timeout(TEST_TIMEOUT)
-def test_payload_push_compressed(veza_con):
+def test_payload_push_compressed(veza_con, app_provider):
     # enable compression
     veza_con.enable_compression = True
     app = generate_app()
-    provider_name = f"Pytest Custom Apps {uuid.uuid4()}"
-    data_source_name = "pytest-test_payload_push"
-    provider = veza_con.get_provider(provider_name)
-    assert provider is None
-
-    provider = veza_con.create_provider(provider_name, "application")
+    data_source_name = os.environ.get('PYTEST_CURRENT_TEST').replace("/", "-")
 
     b64_icon = utils.encode_icon_file("tests/oaa_icon.png")
-    veza_con.update_provider_icon(provider_id=provider['id'], base64_icon=b64_icon)
+    veza_con.update_provider_icon(provider_id=app_provider['id'], base64_icon=b64_icon)
 
-    response = veza_con.push_application(provider_name,
+    response = veza_con.push_application(app_provider['name'],
                                            data_source_name=data_source_name,
                                            application_object=app
                                            )
@@ -104,38 +85,33 @@ def test_payload_push_compressed(veza_con):
     for warning in response["warnings"]:
         assert warning['message'].startswith("Cannot find identity by names")
 
-    data_source = veza_con.get_data_source(data_source_name, provider_id=provider["id"])
+    data_source = veza_con.get_data_source(data_source_name, provider_id=app_provider["id"])
     while True:
-        data_source = veza_con.get_data_source(data_source_name, provider_id=provider["id"])
+        data_source = veza_con.get_data_source(data_source_name, provider_id=app_provider["id"])
         if data_source["status"] == "PENDING":
-            time.sleep(2)
+            time.sleep(4)
         elif data_source["status"] == "SUCCESS":
             break
         else:
             print(data_source)
             assert False, "Datasource parsing failure"
 
-    veza_con.delete_provider(provider["id"])
+
 
 @pytest.mark.skipif(not os.getenv("PYTEST_VEZA_HOST"), reason="Test host is not configured")
 @pytest.mark.timeout(TEST_TIMEOUT)
-def test_payload_push_id_mapping(veza_con):
+def test_payload_push_id_mapping(veza_con, app_provider):
     """ test for app payload where identities are mapped by id instead of name """
 
     app = generate_app_id_mapping()
-    provider_name = f"Pytest Custom ID Based Apps {uuid.uuid4()}"
-    data_source_name = "pytest-test_payload_push_id_mappings"
-    provider = veza_con.get_provider(provider_name)
-    assert provider is None
-
-    provider = veza_con.create_provider(provider_name, "application")
+    data_source_name = os.environ.get('PYTEST_CURRENT_TEST').replace("/", "-")
 
     b64_icon = utils.encode_icon_file("tests/oaa_icon.png")
-    veza_con.update_provider_icon(provider_id=provider['id'], base64_icon=b64_icon)
+    veza_con.update_provider_icon(provider_id=app_provider['id'], base64_icon=b64_icon)
 
     response = None
     try:
-        response = veza_con.push_application(provider_name,
+        response = veza_con.push_application(app_provider['name'],
                                             data_source_name=data_source_name,
                                             application_object=app
                                             )
@@ -154,59 +130,46 @@ def test_payload_push_id_mapping(veza_con):
     for warning in response["warnings"]:
         assert warning['message'].startswith("Cannot find identity by names")
 
-    data_source = veza_con.get_data_source(data_source_name, provider_id=provider["id"])
+    data_source = veza_con.get_data_source(data_source_name, provider_id=app_provider["id"])
     while True:
-        data_source = veza_con.get_data_source(data_source_name, provider_id=provider["id"])
+        data_source = veza_con.get_data_source(data_source_name, provider_id=app_provider["id"])
         if data_source["status"] == "PENDING":
-            time.sleep(2)
+            time.sleep(4)
         elif data_source["status"] == "SUCCESS":
             break
         else:
             print(data_source)
             assert False, "Datasource parsing failure"
 
-    veza_con.delete_provider(provider["id"])
 
 @pytest.mark.skipif(not os.getenv("PYTEST_VEZA_HOST"), reason="Test host is not configured")
-def test_bad_payload(veza_con):
+def test_bad_payload(veza_con, app_provider):
 
     app = generate_app()
-
-    provider_name = f"Pytest Custom Apps {uuid.uuid4()}"
-
-    provider = veza_con.get_provider(provider_name)
-    assert provider is None
-    provider = veza_con.create_provider(provider_name, "application")
-
     payload = app.get_payload()
     # break the payload so it will throw an error
     payload['applications'][0]["bad_property"] = "This will break things"
 
+    data_source_name = os.environ.get('PYTEST_CURRENT_TEST').replace("/", "-")
+
     with pytest.raises(OAAClientError) as e:
-        response = veza_con.push_metadata(provider_name=provider_name, data_source_name="pytest-test_payload_push", metadata=payload)
+        response = veza_con.push_metadata(provider_name=app_provider['name'], data_source_name=data_source_name, metadata=payload)
 
     assert e.value.message is not None
     assert e.value.details is not None
     assert e.value.status_code == 400
-
-    veza_con.delete_provider(provider["id"])
 
     return
 
 
 @pytest.mark.skipif(not os.getenv("PYTEST_VEZA_HOST"), reason="Test host is not configured")
 @pytest.mark.timeout(TEST_TIMEOUT)
-def test_idp_payload_push(veza_con):
+def test_idp_payload_push(veza_con, idp_provider):
 
     idp = generate_idp()
 
-    provider_name = f"Pytest Custom IdP {uuid.uuid4()}"
-    data_source_name = "pytest-test_idp_push"
-    provider = veza_con.get_provider(provider_name)
-    if not provider:
-        provider = veza_con.create_provider(provider_name, "identity_provider")
-
-    response = veza_con.push_application(provider_name,
+    data_source_name = os.environ.get('PYTEST_CURRENT_TEST').replace("/", "-")
+    response = veza_con.push_application(idp_provider['name'],
                                            data_source_name=data_source_name,
                                            application_object=idp
                                            )
@@ -221,7 +184,7 @@ def test_idp_payload_push(veza_con):
             print(f"  - {e}")
 
     while True:
-        data_source = veza_con.get_data_source(data_source_name, provider_id=provider["id"])
+        data_source = veza_con.get_data_source(data_source_name, provider_id=idp_provider["id"])
         if data_source["status"] == "PENDING":
             time.sleep(2)
         elif data_source["status"] == "SUCCESS":
@@ -229,7 +192,5 @@ def test_idp_payload_push(veza_con):
         else:
             print(data_source)
             assert False, "Datasource parsing failure"
-
-    veza_con.delete_provider(provider["id"])
 
     return

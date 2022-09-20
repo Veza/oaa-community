@@ -468,7 +468,7 @@ class OAAClient():
         headers = {"Authorization": f"Bearer {self.api_key}"}
 
         api_path = api_path.lstrip("/")
-        response = requests.delete(f"{self.url}/{api_path}", headers=headers, timeout=10, verify=self.verify_ssl)
+        response = requests.delete(f"{self.url}/{api_path}", headers=headers, timeout=60, verify=self.verify_ssl)
         if response.ok:
             return response.json()
         else:

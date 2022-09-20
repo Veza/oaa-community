@@ -1,4 +1,8 @@
 # Jira Connector Change Log
+## 2022/9/20
+* Fix for possible issue with plugin project permissions
+* Publish Custom Application name will now contain the Jira instance URL
+
 ## 2022/8/29
 * Logging updates and improvements
 

@@ -12,7 +12,6 @@ from oaaclient.client import OAAClient, OAAClientError
 from oaaclient.templates import CustomApplication, CustomPermission, OAAPermission, OAAPropertyType, CustomResource
 from oaaclient.utils import log_arg_error
 from requests import HTTPError
-from time import time
 from urllib.parse import urlparse
 import argparse
 import base64
@@ -26,6 +25,7 @@ import os
 import re
 import requests
 import sys
+import time
 
 # base64 encoding of the GitHub Mark icon for uploading later
 GITHUB_MARK_ICON = """
@@ -95,9 +95,21 @@ def gh_api_get(path, auth_token, github_url="https://api.github.com"):
         api_path = f"{github_url}/{path}"
 
     result = []
+    retries = 0
     while True:
-        response = requests.get(api_path, headers=headers, timeout=10)
+        try:
+            response = requests.get(api_path, headers=headers, timeout=20)
+        except requests.exceptions.RequestException as e:
+            log.warning(f"Error making GitHub API call, {e}")
+            if retries < 5:
+                retries += 1
+                log.warning(f"Retrying {retries} of 5")
+                time.sleep(retries * 2)
+                continue
+            else:
+                raise e
 
+        retries = 0
         if "X-RateLimit-Remaining" in response.headers:
             limit_remaining = int(response.headers.get("X-RateLimit-Remaining"))
             if limit_remaining < 150 and limit_remaining % 50 == 0:
@@ -122,6 +134,7 @@ def gh_api_get(path, auth_token, github_url="https://api.github.com"):
                 return response.json()
         else:
             raise HTTPError(response.text, response=response)
+
 
     return result
 
@@ -179,7 +192,7 @@ def gh_get_org_auth(app_id, org, key_file=None, base64_key=None, github_url="htt
         raise Exception("key_file cannot be none")
 
     # build Github jwt authentication payload, valid from 10 seconds ago to 10 minutes from now
-    jwt_payload = {"iat": int(time() - 10), "exp": int(time() + 600), "iss": app_id}
+    jwt_payload = {"iat": int(time.time() - 10), "exp": int(time.time() + 600), "iss": app_id}
 
     encoded_jwt = jwt.encode(jwt_payload, app_key, algorithm="RS256")
     installations = gh_api_get("/app/installations", encoded_jwt, github_url=github_url)
@@ -232,7 +245,7 @@ def gh_graph_run(query: str, auth_token: str, variables: dict = None, graph_url:
             # GraphAPI can return errors in a success, raise an exception with the error details
 
             # collapse the query into a single line for better logging
-            query_data["query"] = re.sub('\s+', ' ', query_data["query"])
+            query_data["query"] = re.sub(r"\s+", " ", query_data["query"])
             raise GitHubGraphError(errors=response_json["errors"], query=query_data)
         return response.json()
     else:
@@ -529,9 +542,12 @@ class OAAGitHub():
                     raise Exception(f"repo {full_name} unknown team assigned to repository: {team_name} role {team_role}")
 
             team_role = self.__map_permission(team['permission'])
-            log.debug(f"repo {full_name} adding tean {team_name}, role {team_role}")
 
-            self.app.local_groups[team_name].add_role(role=team_role, resources=[repo_resource])
+            if team_role.lower() in self._defined_roles:
+                log.debug(f"repo {full_name} adding team {team_name}, role {team_role}")
+                self.app.local_groups[team_name].add_role(role=team_role, resources=[repo_resource])
+            else:
+                log.warning(f"Unknown role for team {team_name}, role: {team_role}")
 
         return
 
@@ -649,6 +665,8 @@ class OAAGitHub():
         self.app.add_local_role("Write", ["Pull", "Fork", "Push", "Merge"])
         self.app.add_local_role("Maintain", ["Pull", "Fork", "Push", "Merge"])
         self.app.add_local_role("Admin", ["Pull", "Fork", "Push", "Merge", "Manage Access"])
+
+        self._defined_roles = [r.lower() for r in self.app.local_roles]
 
 
 def load_user_map(oaa_app, user_map):

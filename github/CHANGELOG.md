@@ -1,5 +1,8 @@
 # GitHub Connector Change Log
 
+## 2022/09/21
+* Added retries to GitHub API calls
+
 ## 2022/8/24
 * Fix for GitHub teams discovery
 

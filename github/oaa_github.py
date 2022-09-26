@@ -79,7 +79,7 @@ def gh_api_get(path, auth_token, github_url="https://api.github.com"):
     path (string): API path relative to github_url
     auth_token (string): Bearer token value
     pagination (bool): Expect result to be paginated, set True when endpoint accepts per_page & page parameters
-    github_url (str): Optional path for Github endpoing, defaults to "https://api.github.com"
+    github_url (str): Optional path for Github endpoint, defaults to "https://api.github.com"
 
     Returns:
     dictionary: API Response
@@ -204,7 +204,7 @@ def gh_get_org_auth(app_id, org, key_file=None, base64_key=None, github_url="htt
             break
 
     if not org_id:
-        raise Exception(f"Unable to find org {org} in app installations")
+        raise Exception(f"Unable to find org in app installations, verify GitHub App is installed in org {org}")
 
     log.debug(f"retrieving GitHub access token for {org}({org_id})")
     auth_response = gh_api_post(f"/app/installations/{org_id}/access_tokens", auth_token=encoded_jwt, data=None, github_url=github_url)

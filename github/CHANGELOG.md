@@ -1,5 +1,8 @@
 # GitHub Connector Change Log
 
+## 2022/09/23
+* Updated README and error messages
+
 ## 2022/09/21
 * Added retries to GitHub API calls
 

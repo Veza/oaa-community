@@ -7,18 +7,20 @@ license that can be found in the LICENSE file or at
 https://opensource.org/licenses/MIT.
 """
 
-from oaaclient.client import OAAClient, OAAClientError
-from oaaclient.templates import CustomApplication, OAAPermission, OAAPropertyType
-from oaaclient.utils import log_arg_error
-from requests import HTTPError
 import argparse
+import base64
 import logging
 import os
 import re
-import requests
 import sys
-import base64
+import time
 
+import requests
+from requests import HTTPError
+
+from oaaclient.client import OAAClient, OAAClientError
+from oaaclient.templates import CustomApplication, OAAPermission, OAAPropertyType
+from oaaclient.utils import log_arg_error
 
 logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s', level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -172,7 +174,7 @@ class OAAZendesk():
                 if u['default_group_id'] in self.__group_ids:
                     user.add_group(self.__group_ids[u['default_group_id']])
 
-                for group_id in self.__group_memberships[u['id']]:
+                for group_id in self.__group_memberships.get(u['id'], []):
                     user.add_group(self.__group_ids[group_id])
 
                 # zendesk users have a role type of admin, agent or end-user, save this as a proprety of the user
@@ -298,11 +300,38 @@ class OAAZendesk():
             api_path = f"{self.zendesk_url}/{path}"
 
         log.debug(f"Zendesk API GET {api_path}")
-        response = requests.get(api_path, headers=headers, params=params, timeout=10)
-        if response.ok:
-            return response.json()
-        else:
-            raise HTTPError(response.text, response=response)
+        retry = 0
+        try:
+            max_retries = int(os.getenv("OAA_API_RETRIES", 5))
+        except ValueError:
+            log.error("OAA_API_RETRIES variable must be integer, setting to default 5")
+            max_retries = 5
+
+        while True:
+            try:
+                response = requests.get(api_path, headers=headers, params=params, timeout=60)
+            except requests.exceptions.RequestException as e:
+                log.warning(f"Error making Zendesk API call, {e}")
+                if retry < max_retries:
+                    retry += 1
+                    log.warning(f"Retrying {retry} of {max_retries}")
+                    time.sleep(retry * 2)
+                    continue
+                else:
+                    raise e
+
+            if response.ok:
+                return response.json()
+            else:
+                if response.status_code in [429, 500, 502, 503, 504]:
+                    retry += 1
+                    log.warning(f"Error making Zendesk API call, {response.text}")
+                    if retry < max_retries:
+                        log.warning(f"Retrying {retry} of {max_retries}")
+                        time.sleep(retry * 2)
+                        continue
+
+                raise HTTPError(response.text, response=response)
 
 
 def run(zendesk_url: str, zendesk_user: str, zendesk_api_key: str, veza_url: str, veza_api_key: str, save_json: bool = False, verbose: bool = False) -> None:

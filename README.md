@@ -35,10 +35,10 @@ answer the question: “who can and should take what action on what data?”
 
 Open Authorization API is not currently associated with any open source bodies (IETF, etc.). We will be working with 
 various teams to pursue open standards over course of time. All OAA resources in this repository are licensed under
-the MIT license (files are available in the repository).
+the MIT license.
 
 For any feedback on Open Authorization API - for example, API enrichments, etc. - please open an issue. We encourage you 
-to please join our Slack community to share the feedback.
+to please join our [Slack community](https://join.slack.com/t/veza-world/shared_invite/zt-17d9quyiq-20JMp0ikZ0pVNz_e5W5j7Q) to share the feedback.
 
 ## How OAA Works
 OAA works by providing a mechanism to upload authorization information from a target system (e.g. SaaS app,

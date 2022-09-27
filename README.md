@@ -1,5 +1,5 @@
 ![Veza Logo](images/Veza_Lockup_Amethyst.png)
-# Open Authorization API Community
+# Veza Open Authorization API (OAA) Community
 
 To help customers get up and running quickly using Open Authorization API (OAA) we created the Veza OAA Community. This
 repository includes libraries for developing new connectors, several pre-built connectors, examples and documentation.
@@ -17,7 +17,7 @@ providers, data systems, cloud service providers, and SaaS applications — all 
 use cases of access governance, privilege access, cloud entitlements, data lake security, etc.
 To learn more, please visit us at veza.com.
 
-## Open Authorization API
+## Open Authorization API (OAA)
 
 Veza natively supports 40+ integrations natively for systems such as Azure SharePoint, Snowflake, AWS services,
 GCP services, SQL Server, etc. That said, there are often scenarios where organizations want to integrate Veza
@@ -32,6 +32,13 @@ storage system, or custom software, etc.), transform that data into a format Vez
 Veza API to import the data into Veza. Using OAA and connectors, organizations can parse and upload authorization
 metadata for custom SaaS apps and create a more complete view of permissions across cloud/data/identity systems to
 answer the question: “who can and should take what action on what data?”
+
+Open Authorization API is not currently associated with any open source bodies (IETF, etc.). We will be working with 
+various teams to pursue open standards over course of time. All OAA resources in this repository are licensed under
+the MIT license (files are available in the repository).
+
+For any feedback on Open Authorization API - for example, API enrichments, etc. - please open an issue. We encourage you 
+to please join our Slack community to share the feedback.
 
 ## How OAA Works
 OAA works by providing a mechanism to upload authorization information from a target system (e.g. SaaS app,

@@ -1060,7 +1060,7 @@ class LocalRole():
         """
         response = {}
         response['name'] = self.name
-        response['permissions'] = self.permissions
+        response['permissions'] = unique_strs(self.permissions)
         response['tags'] = [tag.__dict__ for tag in self.tags]
         response['custom_properties'] = self.properties
         if self.unique_id:
@@ -1873,3 +1873,31 @@ def append_helper(base, addition):
         base.append(addition)
 
     return base
+
+def unique_strs(input: list) -> list:
+    """Returns a list of unique strings from input list case insensitive
+
+    Returns the unique list of strings from input list in a case insensitive manner.
+    For duplicate strings with different cast (e.g. "STRING" and "string") the case of
+    the first occurrence is returned.
+
+    Args:
+        input (list): list of strings
+
+    Returns:
+        list: list of unique strings
+    """
+
+    if not isinstance(input, list):
+        raise ValueError("input must be list")
+
+    unique = []
+    seen = []
+    for e in input:
+        if not isinstance(e, str):
+            raise ValueError("input elements must be string")
+        if e.lower() not in seen:
+            seen.append(e.lower())
+            unique.append(e)
+
+    return unique

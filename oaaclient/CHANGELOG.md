@@ -1,5 +1,9 @@
 # OAA Client Change Log
 
+## 2022/09/28
+
+* Update to LocalRole payload logic to remove duplicate permissions 
+
 ## 2022/09/20
 
 * Increase timeout on delete API operations

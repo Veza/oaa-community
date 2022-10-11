@@ -86,6 +86,7 @@ GitLab          | Veza Supported | Python   | Discovery for GitLab project permi
 Jira            | Veza Supported | Python   | Jira Cloud support for projects
 Looker          | Veza Supported | Python   | Looker User authorization for models and connections
 PagerDuty       | Veza Supported | Python   | PagerDuty user roles and teams
+Slack           | Veza Supported | Python   | Slack workspace members and roles
 Zendesk         | Veza Supported | Python   | Zendesk user to role assignments
 
 ### Support Levels

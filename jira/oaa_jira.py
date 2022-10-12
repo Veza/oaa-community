@@ -248,6 +248,10 @@ def load_projects(jira_con, oaa_app):
     project_key         = project.get("key")
     project_name        = project.get("name")
 
+    if project_description and len(project_description) > 256:
+      # truncate project description to max length of 256
+      project_description = project_description[:256]
+
     log.info(f"Loading project {project_name}")
 
     if project_name not in oaa_app.resources:

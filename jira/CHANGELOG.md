@@ -1,4 +1,8 @@
 # Jira Connector Change Log
+
+## 2022/10/11
+* Fix for issue with long descriptions. Project descriptions are now truncated to 256 characters if needed.
+
 ## 2022/9/20
 * Fix for possible issue with plugin project permissions
 * Publish Custom Application name will now contain the Jira instance URL

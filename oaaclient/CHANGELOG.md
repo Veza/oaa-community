@@ -1,5 +1,9 @@
 # OAA Client Change Log
 
+## 2022/10/14
+* Optimization to payload size for unset entities
+* Fix for boolean local user properties in payload
+
 ## 2022/09/28
 
 * Update to LocalRole payload logic to remove duplicate permissions 

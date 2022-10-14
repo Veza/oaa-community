@@ -409,10 +409,6 @@ GENERATED_APP_ID_MAPPINGS_PAYLOAD = """
   ],
   "identity_to_permissions": [
     {
-      "identity": "1234",
-      "identity_type": "local_user"
-    },
-    {
       "identity": "1235",
       "identity_type": "local_user",
       "role_assignments": [
@@ -457,10 +453,6 @@ GENERATED_APP_ID_MAPPINGS_PAYLOAD = """
       ]
     },
     {
-      "identity": "g1",
-      "identity_type": "local_group"
-    },
-    {
       "identity": "g2",
       "identity_type": "local_group",
       "role_assignments": [
@@ -473,10 +465,6 @@ GENERATED_APP_ID_MAPPINGS_PAYLOAD = """
           ]
         }
       ]
-    },
-    {
-      "identity": "g3",
-      "identity_type": "local_group"
     }
   ]
 }

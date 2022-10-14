@@ -413,7 +413,7 @@ class CustomApplication(Application):
 
         return
 
-    def get_identity_to_permissions(self) -> dict:
+    def get_identity_to_permissions(self) -> list:
         """ Collect authorizations for all identities into a single list. """
 
         identity_to_permissions = []
@@ -422,7 +422,12 @@ class CustomApplication(Application):
         identities.extend(self.local_groups.values())
         identities.extend(self.idp_identities.values())
         for identity in identities:
-            identity_to_permissions.append(identity.get_identity_to_permissions(application_name=self.name))
+            entry = identity.get_identity_to_permissions(application_name=self.name)
+            if "application_permissions" in entry or "role_assignments" in entry:
+                identity_to_permissions.append(entry)
+            else:
+                # identity has no permissions or roles, pass
+                pass
 
         return identity_to_permissions
 
@@ -853,7 +858,7 @@ class LocalUser(Identity):
             user['id'] = self.unique_id
 
         # filter out None/empty values before return
-        return {k: v for k, v in user.items() if v}
+        return {k: v for k, v in user.items() if v not in [None, [], {}]}
 
 
 class LocalGroup(Identity):

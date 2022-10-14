@@ -445,19 +445,6 @@ CUSTOM_PROPERTIES_PAYLOAD = """
       "resource_types": []
     }
   ],
-  "identity_to_permissions": [
-    {
-      "identity": "bob",
-      "identity_type": "local_user"
-    },
-    {
-      "identity": "sue",
-      "identity_type": "local_user"
-    },
-    {
-      "identity": "admins",
-      "identity_type": "local_group"
-    }
-  ]
+  "identity_to_permissions": []
 }
 """

@@ -25,6 +25,7 @@ log = logging.getLogger(__name__)
 
 # dictionary that will track permissions to roles since they come from two very different API calls, in the future OAA will handle this
 jira_role_permissions = {}
+jira_software_users_id = None
 
 def push_to_veza(veza_con, oaa_app, save_json=False):
   """ push data to Veza """
@@ -144,33 +145,36 @@ def load_permissions(jira_con, oaa_app):
   # jira defaults to assigning logged in users permissions, assign the `jira-software-users`
   # role the default permissions. The users will only receive the permissions on projects
   # that are not market private
-  oaa_app.add_local_role("jira-software-users", ["VIEW_ISSUES",
-                                                 "VIEW_PROJECTS",
-                                                 "ASSIGN_ISSUES",
-                                                 "WORK_ON_ISSUES",
-                                                 "EDIT_OWN_WORKLOGS",
-                                                 "DELETE_OWN_WORKLOGS",
-                                                 "DELETE_OWN_ATTACHMENTS",
-                                                 "CREATE_ATTACHMENTS",
-                                                 "EDIT_OWN_COMMENTS",
-                                                 "DELETE_OWN_COMMENTS",
-                                                 "ADD_COMMENTS",
-                                                 "VIEW_VOTERS_AND_WATCHERS",
-                                                 "TRANSITION_ISSUES",
-                                                 "SET_ISSUE_SECURITY",
-                                                 "SCHEDULE_ISSUES",
-                                                 "RESOLVE_ISSUES",
-                                                 "MOVE_ISSUES",
-                                                 "LINK_ISSUES",
-                                                 "EDIT_ISSUES",
-                                                 "CREATE_ISSUES",
-                                                 "CLOSE_ISSUES",
-                                                 "ASSIGNABLE_USER",
-                                                 "VIEW_READONLY_WORKFLOW",
-                                                 "VIEW_DEV_TOOLS",
-                                                 "MANAGE_SPRINTS_PERMISSION",
-                                                 "BROWSE_PROJECTS"
-                                                 ])
+  oaa_app.add_local_role(name="jira-software-users",
+                         unique_id="jira-software-users",
+                         permissions=["VIEW_ISSUES",
+                                      "VIEW_PROJECTS",
+                                      "ASSIGN_ISSUES",
+                                      "WORK_ON_ISSUES",
+                                      "EDIT_OWN_WORKLOGS",
+                                      "DELETE_OWN_WORKLOGS",
+                                      "DELETE_OWN_ATTACHMENTS",
+                                      "CREATE_ATTACHMENTS",
+                                      "EDIT_OWN_COMMENTS",
+                                      "DELETE_OWN_COMMENTS",
+                                      "ADD_COMMENTS",
+                                      "VIEW_VOTERS_AND_WATCHERS",
+                                      "TRANSITION_ISSUES",
+                                      "SET_ISSUE_SECURITY",
+                                      "SCHEDULE_ISSUES",
+                                      "RESOLVE_ISSUES",
+                                      "MOVE_ISSUES",
+                                      "LINK_ISSUES",
+                                      "EDIT_ISSUES",
+                                      "CREATE_ISSUES",
+                                      "CLOSE_ISSUES",
+                                      "ASSIGNABLE_USER",
+                                      "VIEW_READONLY_WORKFLOW",
+                                      "VIEW_DEV_TOOLS",
+                                      "MANAGE_SPRINTS_PERMISSION",
+                                      "BROWSE_PROJECTS"
+                                      ]
+                                    )
 
 
 def load_users(jira_con, oaa_app):
@@ -187,28 +191,37 @@ def load_users(jira_con, oaa_app):
     if user['accountType'] != 'atlassian':
       # ignore non-users for now
       continue
-    user_name = user['displayName']
-    user_email = None
-    if "emailAddress" in user:
-      user_email = user['emailAddress']
+    user_id = user["accountId"]
+    user_name = user["displayName"]
+    user_email = user.get("emailAddress")
 
-    if user_name not in oaa_app.local_users:
-      oaa_app.add_local_user(user_name, identities=user_email)
+    if user_id not in oaa_app.local_users:
+      oaa_app.add_local_user(name=user_name, unique_id=user_id, identities=user_email)
 
-    oaa_app.local_users[user_name].set_property("account_id", user['accountId'])
-    oaa_app.local_users[user_name].set_property("account_type", user['accountType'])
-    oaa_app.local_users[user_name].is_active = user['active']
+    oaa_app.local_users[user_id].set_property("account_id", user_id)
+    oaa_app.local_users[user_id].set_property("account_type", user['accountType'])
+    oaa_app.local_users[user_id].is_active = user['active']
 
 
 def load_groups(jira_con, oaa_app):
   """ discovery Jira groups and load members """
 
+  # set the jira_software_user_id value to the group ID when we find it
+  global jira_software_users_id
+
   groups = jira_con.api_get("group/bulk")
 
   for group in groups:
-    group_name = group['name']
-    if not group_name in oaa_app.local_groups:
-      oaa_app.add_local_group(group_name)
+    group_name = group["name"]
+    group_id = group["groupId"]
+
+    # we need the ID of the `jira-software-users` group for reference
+    if group_name == "jira-software-users":
+      log.info(f"Setting jira-software-users_id to {group_id}")
+      jira_software_users_id = group_id
+
+    if not group_id in oaa_app.local_groups:
+      oaa_app.add_local_group(name=group_name, unique_id=group_id)
 
     try:
       group_members = jira_con.api_get(
@@ -223,17 +236,16 @@ def load_groups(jira_con, oaa_app):
       if member['accountType'] == "app":
         # skip builtins and app users
         continue
-      member_name = member['displayName']
-      if member_name not in oaa_app.local_users:
-        member_email = None
-        if "emailAddress" in member:
-          member_email = member['emailAddress']
-        oaa_app.add_local_user(member_name, identities=member_email)
+      member_id = member["accountId"]
+      member_name = member["displayName"]
+      if member_id not in oaa_app.local_users:
+        member_email = member.get("emailAddress")
+        oaa_app.add_local_user(name=member_name, unique_id=member_id, identities=member_email)
 
-      oaa_app.local_users[member_name].add_group(group_name)
+      oaa_app.local_users[member_id].add_group(group_id)
 
   # assign the jira-software-users group access to the jira app
-  oaa_app.local_groups['jira-software-users'].add_role('jira-software-users', apply_to_application=True)
+  oaa_app.local_groups[jira_software_users_id].add_role('jira-software-users', apply_to_application=True)
 
 
 def load_projects(jira_con, oaa_app):
@@ -278,13 +290,13 @@ def process_project(jira_con, oaa_app, project, project_roles, project_permissio
   # track a list of unknown holder types to only log once per type
   unknown_holder_types = []
 
-  for permission in project_permission_scheme.get("permissions"):
+  for permission in project_permission_scheme.get("permissions", []):
     if "holder" not in permission:
       # no users/groups attached to the role - skip
       continue
 
     permission_name         = permission.get("permission")
-    permission_holder       = permission.get("holder")
+    permission_holder       = permission.get("holder", {})
     permission_holder_type  = permission_holder.get("type")
 
     if permission_name not in oaa_app.custom_permissions:
@@ -302,12 +314,13 @@ def process_project(jira_con, oaa_app, project, project_roles, project_permissio
         roles_to_permissions.get(role_id).get("permissions").append(permission_name)
 
     elif permission_holder_type == "group":
-      group_name = permission_holder.get("group").get("name")
+      group_name = permission_holder.get("group", {}).get("name")
+      group_id = permission_holder.get("group", {}).get("groupId")
 
-      if group_name not in groups_to_permissions:
-        groups_to_permissions[group_name] = {"name": group_name, "permissions": [permission_name]}
+      if group_id not in groups_to_permissions:
+        groups_to_permissions[group_id] = {"name": group_name, "id": group_id, "permissions": [permission_name]}
       else:
-        groups_to_permissions.get(group_name).get("permissions").append(permission_name)
+        groups_to_permissions.get(group_id, {}).get("permissions", []).append(permission_name)
 
     elif permission_holder_type == "applicationRole":
       # TODO: implement
@@ -322,14 +335,14 @@ def process_project(jira_con, oaa_app, project, project_roles, project_permissio
         unknown_holder_types.append(permission_holder_type)
 
   # iterate the groups_to_permissions dict and add authorization to the groups
-  for group in groups_to_permissions:
-    group_name = groups_to_permissions[group].get("name")
+  for group_id in groups_to_permissions:
+    group_name = groups_to_permissions[group_id].get("name", "")
 
     # ensure that the group exists in the oaa_app
-    if group_name not in oaa_app.local_groups:
-      oaa_app.add_local_group(group_name)
+    if group_id not in oaa_app.local_groups:
+      oaa_app.add_local_group(name=group_name, unique_id=group_id)
 
-    for permission in groups_to_permissions[group].get("permissions"):
+    for permission in groups_to_permissions[group_id].get("permissions"):
         if permission not in oaa_app.custom_permissions:
             log.info(f"Creating permission {permission}")
             oaa_app.add_custom_permission(permission, parse_permissions(permission))
@@ -337,10 +350,15 @@ def process_project(jira_con, oaa_app, project, project_roles, project_permissio
     # create a local role (project_id-group_name)
     local_project_role = f"{project_name}-{group_name}"
     if local_project_role not in oaa_app.local_roles:
-      oaa_app.add_local_role(local_project_role, groups_to_permissions[group].get("permissions"))
+      role_permissions = groups_to_permissions[group_id].get("permissions", [])
+      oaa_app.add_local_role(local_project_role, unique_id=local_project_role, permissions=role_permissions)
 
     # add authorization to the group
-    oaa_app.local_groups.get(group_name).add_role(role=local_project_role, resources=[oaa_app.resources.get(project_name)])
+    local_group = oaa_app.local_groups.get(group_id)
+    if not local_group:
+      log.warning(f"Group not properly created, {group_name}, {group_id}")
+      continue
+    local_group.add_role(role=local_project_role, resources=[oaa_app.resources.get(project_name)])
 
   # iterate the roles_to_permissions dict and add authorization to users who have the role
   for role in roles_to_permissions:
@@ -352,7 +370,7 @@ def process_project(jira_con, oaa_app, project, project_roles, project_permissio
     local_project_role = f"{project_name}-{roles_to_permissions[role].get('name')}"
 
     if local_project_role not in oaa_app.local_roles:
-      oaa_app.add_local_role(local_project_role, roles_to_permissions[role].get("permissions"))
+      oaa_app.add_local_role(local_project_role, unique_id=local_project_role, permissions=roles_to_permissions[role].get("permissions"))
 
     # associate role to users
     for actor in role_details.get("actors"):
@@ -369,8 +387,12 @@ def process_project(jira_con, oaa_app, project, project_roles, project_permissio
 
   if not project['isPrivate']:
     # project is not private, need to assign access for jira-software-users
-    oaa_app.local_groups['jira-software-users'].add_role("jira-software-users", resources=[oaa_app.resources.get(project_name)])
-    return
+    if jira_software_users_id:
+      oaa_app.local_groups[jira_software_users_id].add_role("jira-software-users", resources=[oaa_app.resources.get(project_name)])
+    else:
+      log.warning("Group ID for jira-software-users is not set, cannot add users to non-private project")
+
+  return
 
 
 def parse_permissions(name):

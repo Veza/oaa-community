@@ -1,5 +1,8 @@
 # Jira Connector Change Log
 
+## 2022/10/24
+* Fix for issue with names not being unique. Jira unique IDs are now used when registering users and groups.
+
 ## 2022/10/11
 * Fix for issue with long descriptions. Project descriptions are now truncated to 256 characters if needed.
 

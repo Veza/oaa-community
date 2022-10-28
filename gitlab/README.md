@@ -1,49 +1,54 @@
 # OAA Connector for GitLab
 
-Python connector for querying GitLab deployment to discover users and projects. Provides authorization data for each projects users.
-
 ## Overview
 
-This connector authenticates to the GitLab deployment using a read-only access token for an admin user to discover all users, groups and projects configured on the deployment. Each user's access (if access is allowed) to projects is determined based on their group memberships, direct assignments and visibility properties of the project.
+Python connector for querying GitLab to discover Users, Groups and Projects. Provides authorization data for each group and projects. Supports both self-hosted and SaaS GitLab deployments.
+
+This connector authenticates to the GitLab deployment using a read-only access token. The connector will discover all groups, sub-groups, and projects the token is authorized to access. For self-hosted (non-SaaS)  environments, an admin token can be used to discover all groups and additional user information.
+
+See [setup](#setup) for more details.
 
 
 ### Generic Application Mappings
 
 This connector uses the OAA Application template to map applications and identities to permissions. The following table shows how Custom Application entities correspond to GitLab entities:
 
-GitLab | Generic Application
------------- | -------------
-deployment | Application
-Users | Local User
-Group | Local Group
-GitLab Admin | Local Role
-Logged in User | Local Role
-project | Application Resource
+| GitLab         | Generic Application  |
+| -------------- | -------------------- |
+| deployment     | Application          |
+| Users          | Local User           |
+| GitLab Admin   | Local Role           |
+| Logged in User | Local Role           |
+| project        | Application Resource |
+
+GitLab groups and sub-groups are represented both by a `Local Group` for membership and by a `Resource` or `Sub-Resource` to show
+user's role in the group and associated permissions (e.g. Developer, Owner, Guest).
 
 ### Attributes
-Entity  | Property        | Values
-------- |---------------- |-------
-User    | `bot`           | Boolean for bot users
-User    | `gitlab_id`     |  Unique GitLab user ID number
-User    | `is_licensed`   | State of GitLab license usage
-User    | `state`         | Account state `active`, `blocked`, `deactivated`
-User    | `is_active`     | True if account state is `active`
-User    | `created_at`    | Time user account was created
-User    | `last_login_at` | Time of last user login to GitLab
-Project | `visibility`    | Project visibility, `private`, `internal`, `public`
-Project | `gitlab_id`     |  Unique GitLab project ID number
+| Entity  | Property        | Values                                                                |
+| ------- | --------------- | --------------------------------------------------------------------- |
+| User    | `bot`           | Boolean for bot users\*                                                 |
+| User    | `gitlab_id`     | Unique GitLab user ID number                                          |
+| User    | `is_licensed`   | State of GitLab license usage                                         |
+| User    | `state`         | Account state `active`, `blocked`, `deactivated`                      |
+| User    | `is_active`     | True if account state is `active`                                     |
+| User    | `created_at`    | Time user account was created                                         |
+| User    | `last_login_at` | Time of last user login to GitLab\* |
+| Project | `visibility`    | Project visibility, `private`, `internal`, `public`                   |
+| Project | `gitlab_id`     | Unique GitLab project ID number                                       |
+
 
 ### Limitations
-* Based on API limitations project discovery is limited to 50,000 projects.
+* Attributes above marked with `*` are only available on self-hosted with an admin token
 * Does not currently process external users
-* Projects are not grouped by their Groups and Sub-groups, all projects are listed using their full path name
-* Does not track bot user permissions
 
 ## Setup
 ### GitLab Setup Instructions
-1. Generate an access token for a user with admin permissions, this can be an existing user or a new user created for this role
+1. Generate a [GitLab access token](https://docs.gitlab.com/ee/security/token_overview.html) under GitLab *Edit profile* > * Access Tokens*.
+  * For self-hosted it is recommended to generate a personal access token for an Admin-level user to enable full discovery.
+  * For GitLab SaaS a group token is recommended for best results. Personal access tokens for group Owner can also be used.
 * Assign the access token `read_api` access only
-* Assign the token a name and experation date
+* Assign the token a name and expiration date
 * Save the generated token
 
 ### Veza Setup Instructions
@@ -63,8 +68,9 @@ Project | `gitlab_id`     |  Unique GitLab project ID number
     ```
 
 3. Run the code:
+
     ```
-    ./oaa_gitlab.py --gitlab-url <URL for GitLab> --veza-url <Veza URL> --veza-user <Veza User>
+    ./oaa_gitlab.py --gitlab-url <URL for GitLab> --veza-url <Veza URL>
     ```
 
     Optionally, all parameters can be passed via OS environment variables
@@ -73,7 +79,8 @@ Project | `gitlab_id`     |  Unique GitLab project ID number
     export GITLAB_URL=<GitLab URL>
     export GITLAB_ACCESS_TOKEN=<GitLab Access Token>
     export VEZA_URL=<Veza URL>
-    export VEZA_USER=<Veza User>
     export VEZA_API_KEY=<Veza API key>
     ./oaa_gitlab.py
     ```
+
+   > `GITLAB_URL` will default to `https://gitlab.com` if not set. For self-hosted you must set the `GITLAB_URL` environment variable or `--gitlab-url` at run time.

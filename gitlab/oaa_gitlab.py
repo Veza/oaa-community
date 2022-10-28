@@ -6,18 +6,24 @@ Use of this source code is governed by the MIT
 license that can be found in the LICENSE file or at
 https://opensource.org/licenses/MIT.
 """
+from __future__ import annotations
 
-from oaaclient.client import OAAClient, OAAClientError
-from oaaclient.templates import CustomApplication, CustomResource, OAAPermission, OAAPropertyType
-from requests import HTTPError
 import argparse
-import logging
 import json
+import logging
 import os
 import re
-import requests
 import sys
 
+import requests
+from requests import HTTPError
+
+import oaaclient.utils as oaautils
+from oaaclient.client import OAAClient, OAAClientError
+from oaaclient.templates import CustomApplication, CustomResource, LocalGroup, LocalUser, OAAPermission, OAAPropertyType
+
+# logging handler
+logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s', level=logging.INFO)
 log = logging.getLogger(__name__)
 
 
@@ -27,7 +33,7 @@ class OAAGitLab():
 
     Argument:
         gitlab_url (string): URL for GitLab host with our without protocol, if no protocol assumes https://
-        access_token (string): Impersination token used for GitLab API calls
+        access_token (string): Token used for GitLab API calls
         deployment_name (string): Optional, name for deployment will be used for Application name, if omitted hostname is used
 
     Attributes:
@@ -40,6 +46,7 @@ class OAAGitLab():
     """
 
     def __init__(self, gitlab_url: str, access_token: str, deployment_name: str = None) -> None:
+        self.parent_name = None
         self.member_group_name = "Member"
         self.member_role_name = "Member"
         self.admin_role_name = "Admin"
@@ -57,22 +64,48 @@ class OAAGitLab():
         else:
             self.deployment_name = deployment_name
 
+
         self.access_token = access_token
-        self.app = CustomApplication(f"GitLab - {self.deployment_name}", "GitLab")
 
         # test token
         try:
-            calling_user = self.__gl_api_get("/api/v4/user")
+            calling_user = self._gl_api_get("/api/v4/user")
         except HTTPError as e:
             log.error(f"Error calling GitLab API ({e.response.status_code})")
             raise(HTTPError)
 
-        if not calling_user.get("is_admin"):
-            raise Exception(f"GitLab access token user must have Admin Access Level. Calling user: {calling_user['username']}")
+        self.calling_as_admin = False
+        if calling_user.get("is_admin"):
+            self.calling_as_admin = True
+        log.info(f"Running as GitLab user {calling_user.get('name')} ({calling_user.get('username')}) - is_admin {calling_user.get('is_admin', False)}")
 
-        self.__populate_permissions()
+        if self.deployment_name == "gitlab.com":
+            self.datasource_name = f"gitlab.com - {calling_user.get('name')} ({calling_user.get('id')})"
+        else:
+            self.datasource_name = self.deployment_name
 
-        # GitLab returns permissions as integers, secret decorder ring as dictinoary
+        app_name = f"GitLab - {self.deployment_name}"
+
+        self.app = CustomApplication(app_name, "GitLab")
+        # define custom properties for the users
+        self.app.property_definitions.define_local_user_property("gitlab_id", OAAPropertyType.NUMBER)
+        self.app.property_definitions.define_local_user_property("bot", OAAPropertyType.BOOLEAN)
+        self.app.property_definitions.define_local_user_property("is_licensed", OAAPropertyType.STRING)
+        self.app.property_definitions.define_local_user_property("state", OAAPropertyType.STRING)
+        self.app.property_definitions.define_local_user_property("saml_login", OAAPropertyType.BOOLEAN)
+
+        # define custom properties for group object
+        self.app.property_definitions.define_resource_property("group", "gitlab_id", OAAPropertyType.NUMBER)
+        self.app.property_definitions.define_resource_property("group", "visibility", OAAPropertyType.STRING)
+        self.app.property_definitions.define_resource_property("group", "require_two_factor_authentication", OAAPropertyType.BOOLEAN)
+
+        # define custom properties for project
+        self.app.property_definitions.define_resource_property("project", "gitlab_id", OAAPropertyType.NUMBER)
+        self.app.property_definitions.define_resource_property("project", "visibility", OAAPropertyType.STRING)
+
+        self._populate_permissions()
+
+        # GitLab returns permissions as integers, secret decoder ring as dictionary
         self.access_levels = {0: "No access",
                               5: "Minimal access",
                               10: "Guest",
@@ -82,13 +115,14 @@ class OAAGitLab():
                               50: "Owner"
                               }
 
-        # in order to avoid calling groups API repeaditly to get user's access levels store the users access levels into dictionary keyed by group id
+        #TODO: Might not need anymore
+        # in order to avoid calling groups API repeatedly to get user's access levels store the users access levels into dictionary keyed by group id
         self.group_user_access_levels = {}
         # store each groups parent ID to reduce API calls
         self.group_parent_ids = {}
 
-    def __map_access_level(self, access_level: int) -> str:
-        """ returns string of role name from GitLab numberic based access levels """
+    def _map_access_level(self, access_level: int) -> str:
+        """ returns string of role name from GitLab numeric based access levels """
 
         try:
             access_level = int(access_level)
@@ -102,11 +136,14 @@ class OAAGitLab():
 
         return access_role
 
-    def __populate_permissions(self) -> None:
+    def _populate_permissions(self) -> None:
         """ Defines permissions and creates base roles/groups """
 
+        # Self-Hosted Admin users
+        self.app.add_custom_permission("Admin", [OAAPermission.DataRead, OAAPermission.DataWrite, OAAPermission.MetadataRead, OAAPermission.MetadataWrite, OAAPermission.DataCreate, OAAPermission.DataDelete])
+
+        # GitLab built in permissions
         gitlab_permissions = {
-            "Admin": [OAAPermission.DataWrite, OAAPermission.MetadataWrite],
             "View": [OAAPermission.MetadataRead],
             "Manage Access": [OAAPermission.MetadataWrite],
             "Pull": [OAAPermission.DataRead],
@@ -117,164 +154,221 @@ class OAAGitLab():
         }
 
         for p in gitlab_permissions:
-            self.app.add_custom_permission(p, gitlab_permissions[p])
+            self.app.add_custom_permission(p, gitlab_permissions[p], apply_to_sub_resources=True)
 
         # GitLab Roles & groups
-        self.app.add_local_role(self.admin_role_name, ["Admin"])
-        self.app.add_local_role(self.member_role_name, ["View"])
-        self.app.add_local_group(self.member_group_name)
+        self.app.add_local_role(self.admin_role_name, unique_id=self.admin_role_name, permissions=["Admin"])
+        self.app.add_local_role(self.member_role_name, unique_id=self.member_role_name, permissions=["View"])
+        self.app.add_local_group(self.member_group_name, unique_id=self.member_group_name)
 
         # Repo Roles
-        self.app.add_local_role("Guest", ["View", "Pull"])
-        self.app.add_local_role("Reporter", ["View", "Pull"])
-        self.app.add_local_role("Developer", ["View", "Pull", "Branch", "Push", "Merge"])
-        self.app.add_local_role("Maintainer", ["View", "Pull", "Branch", "Push", "Merge"])
-        self.app.add_local_role("Owner", ["View", "Pull", "Branch", "Push", "Merge", "Manage Access"])
+        self.app.add_local_role("Guest", unique_id="Guest", permissions=["View", "Pull"])
+        self.app.add_local_role("Reporter", unique_id="Reporter", permissions=["View", "Pull"])
+        self.app.add_local_role("Developer", unique_id="Developer", permissions=["View", "Pull", "Branch", "Push", "Merge"])
+        self.app.add_local_role("Maintainer", unique_id="Maintainer", permissions=["View", "Pull", "Branch", "Push", "Merge"])
+        self.app.add_local_role("Owner", unique_id="Owner", permissions=["View", "Pull", "Branch", "Push", "Merge", "Manage Access"])
 
     def discover(self) -> None:
-        """ run full GitLab discovery process """
+        """Run GitLab discovery process """
         log.info("Starting GitLab discovery")
-        self.discover_users()
-        self.discover_groups()
-        self.discover_projects()
+
+        # discover all the users, if running with group token it will only discover users that are part of the group and subgroups
+
+        # If admin user, then we can use the /users API to get more detail on each user
+        if self.calling_as_admin:
+            self.discover_all_users()
+
+        # discover all the groups, if running with group token will only discover group from token
+        #TODO: validate you do not get public groups with SaaS
+        self.discover_all_groups()
         return
 
-    def discover_users(self) -> None:
-        """ discover GitLab users """
+    def discover_all_users(self) -> None:
+        """Discover all GitLab users """
 
-        # define custom properties for the users
-        self.app.property_definitions.define_local_user_property("gitlab_id", OAAPropertyType.NUMBER)
-        self.app.property_definitions.define_local_user_property("bot", OAAPropertyType.BOOLEAN)
-        self.app.property_definitions.define_local_user_property("is_licensed", OAAPropertyType.STRING)
-        self.app.property_definitions.define_local_user_property("state", OAAPropertyType.STRING)
-
-        log.info("Discovering GitLab Users")
-        gitlab_users = self.__gl_api_get("/api/v4/users")
+        log.info("Discovering all GitLab users")
+        gitlab_users = self._gl_api_get("/api/v4/users")
         for user in gitlab_users:
-            user_name = user['username']
-            is_admin = user['is_admin']
-            if user_name not in self.app.local_users:
-                log.debug(f"Adding user {user_name}")
-                # some propreties available that might be nice to save
-                # name = user['name']
-                local_user = self.app.add_local_user(user_name, identities=[user['email']])
-                local_user.created_at = user['created_at']
-                local_user.last_login_at = user['last_sign_in_at']
-                local_user.set_property("gitlab_id", user['id'])
-                local_user.set_property("is_licensed",  user['using_license_seat'])
-
-                # GitLab use three states, active, blocked, deactivated
-                local_user.set_property("state", user['state'])
-                if user['state'] == "active":
-                    local_user.is_active = True
-                else:
-                    local_user.is_active = False
-            if not user['bot']:
-                self.app.local_users[user_name].add_group(self.member_group_name)
-                self.app.local_users[user_name].add_role(self.member_role_name, apply_to_application=True)
-                if is_admin:
-                    self.app.local_users[user_name].add_role(self.admin_role_name, apply_to_application=True)
-            else:
-                self.app.local_users[user_name].set_property("bot", True)
-
+            self.add_user(user)
 
         return
 
-    def discover_groups(self) -> None:
-        """ discover GitLab groups, populates map of user permissions to avoid repeating calls to API """
+    def add_user(self, user_info: dict) -> LocalUser:
+        """Add single user to OAA App
+
+        Adds a single user based on the user_info dictionary, containing user
+        details from either the users or members API. If the user already exists the existing user
+        object is returned.
+
+        Args:
+            user_info (dict): API response containing a single user's information
+
+        Returns:
+            LocalUser: OAA local user object for user
+        """
+
+        user_name = user_info['username']
+        user_id = user_info["id"]
+        if user_id not in self.app.local_users:
+            local_user = self.app.add_local_user(user_name, unique_id=user_id)
+        else:
+            local_user = self.app.local_users[user_id]
+
+            local_user.created_at = user_info.get("created_at")
+            local_user.last_login_at = user_info.get("last_sign_in_at")
+            local_user.set_property("gitlab_id", user_info['id'])
+
+            # TODO in SaaS this appears to be `is_using_seat`
+            if user_info.get("using_license_seat"):
+                local_user.set_property("is_licensed",  user_info['using_license_seat'])
+
+            # GitLab use three states, active, blocked, deactivated
+            local_user.set_property("state", user_info['state'])
+            if user_info['state'] == "active":
+                local_user.is_active = True
+            else:
+                local_user.is_active = False
+
+            # user email will only be available on self-hosted when run with Admin token
+            if user_info.get("email"):
+                local_user.add_identities([user_info["email"]])
+
+            # SAML identity for SSO should be available if configured
+            if user_info.get("group_saml_identity"):
+                external_id = user_info["group_saml_identity"].user_info("extern_uid")
+                local_user.add_identities(external_id)
+                # set property for local_user is saml enabled
+                local_user.set_property("saml_login", True)
+
+            if user_info.get("is_admin"):
+                local_user.add_role(self.admin_role_name, apply_to_application=True)
+
+            if user_info.get("bot") is True:
+                local_user.set_property("bot", True)
+
+            local_user.add_group(self.member_group_name)
+
+        return self.app.local_users[user_id]
+
+    def discover_all_groups(self) -> None:
+        """Discover GitLab groups
+
+        Discovers all top-level groups available to the calling user, and any sub-groups
+
+        """
 
         log.info("Starting discovery GitLab Groups")
-        gitlab_groups = self.__gl_api_get("api/v4/groups")
+        gitlab_groups = self._gl_api_get("api/v4/groups", params={"top_level_only": True})
 
         for group in gitlab_groups:
-            group_name = group['name']
-            group_id = group['id']
-            self.group_parent_ids[group_id] = group['parent_id']
-            log.debug(f"Group - {group_name}")
-            self.app.add_local_group(group_name)
+            self.discover_group(group.get("id"))
 
-            # get group membership
-            group_members = self.__gl_api_get(f"/api/v4/groups/{group_id}/members")
-            self.group_user_access_levels[group_id] = {}
-            for member in group_members:
-                user_name = member['username']
-                if user_name not in self.app.local_users:
-                    raise Exception(f"Unknown user {user_name}")
-                self.app.local_users[user_name].add_group(group_name)
-                self.group_user_access_levels[group_id][user_name] = self.__map_access_level(member['access_level'])
+    def discover_group(self, group_id: int, parent_group_resource: CustomResource = None) -> CustomResource:
+        """Discover Single Group and Sub-Groups
 
-    def discover_projects(self) -> None:
-        """ discover all Projects, currently works at a flat level """
+        Args:
+            group_id (int): Group ID
+            parent_group_resource (CustomResource, optional): OAA CustomResource of parent group or None for top level groups. Defaults to None.
 
-        log.info("Starting discovery GitLab Projects")
-        # define custom propreties for project
-        self.app.property_definitions.define_resource_property("project", "gitlab_id", OAAPropertyType.NUMBER)
-        self.app.property_definitions.define_resource_property("project", "visibility", OAAPropertyType.STRING)
-
-        projects = self.__gl_api_get("api/v4/projects")
-
-        for project in projects:
-            # since we aren't currently tracking by group space use full path for project name
-            project_name = project['name_with_namespace']
-            project_id = project['id']
-            description = project['description']
-            log.debug(f"Project - {project_name}")
-            self.app.add_resource(project_name, "project", description=description)
-            self.app.resources[project_name].set_property("gitlab_id", project_id)
-
-            log.debug(f"{project['namespace']=}")
-            if project["namespace"]["kind"] == "group":
-                group_id = project["namespace"]["id"]
-                self.assign_group_permissions(self.app.resources[project_name], group_id)
-            else:
-                log.warning(f"Non-group namespace {project['namespace']['kind']}")
-
-            # get individual member permissions
-            project_members = self.__gl_api_get(f"api/v4/projects/{project_id}/members")
-            for member in project_members:
-                user_name = member['username']
-                access_role = self.__map_access_level(member['access_level'])
-                log.debug(f"Assigning {user_name} {access_role} to {project_name}")
-                self.app.local_users[user_name].add_role(access_role, [self.app.resources[project_name]])
-
-            visibility = project["visibility"]
-            self.app.resources[project_name].set_property("visibility", visibility)
-            if visibility == "private":
-                # private project, accessable only by group members and direct permissions, nothing to do
-                log.debug(f"{project_name} is private repo, not additional permissions to add")
-            elif visibility == "internal":
-                # internal repo, any logged in user has
-                log.debug(f"{project_name} is internal repo, adding '{self.member_group_name}' for group {self.member_group_name}")
-                self.app.local_groups[self.member_group_name].add_role(self.member_role_name, [self.app.resources[project_name]])
-            elif visibility == "public":
-                # public repo add view for all internal users
-                log.debug(f"{project_name} is public repo, adding '{self.member_group_name}' for group {self.member_group_name}")
-                self.app.local_groups[self.member_group_name].add_role(self.member_role_name, [self.app.resources[project_name]])
-
-    def assign_group_permissions(self, resource: CustomResource, group_id: int) -> None:
+        Returns:
+            CustomResource: New custom resource representing Group
         """
-        loops through all users in a group and assigns their respective permissions to the resource
 
-        utilizes self.group_user_access_levels map populated during discover_groups to avoid API calls
-        recuresively calls itself if group has parent ID in self.group_parent_ids
+        group_info = self._gl_api_get(f"api/v4/groups/{group_id}", params={"with_projects": False})
+        name = group_info.get("name")
+        full_name = group_info.get("full_name")
+        log.info(f"Discovering group {full_name}")
+        local_group = self.app.add_local_group(name, unique_id=group_id)
+
+        if parent_group_resource:
+            # sub group
+            group_resource = parent_group_resource.add_sub_resource(full_name, unique_id=group_id, resource_type="group")
+        else:
+            # top level group
+            group_resource = self.app.add_resource(full_name, unique_id=group_id, resource_type="group")
+
+        # set visibility
+        group_resource.set_property("gitlab_id", group_id)
+        group_resource.set_property("visibility", group_info.get("visibility"))
+        group_resource.set_property("require_two_factor_authentication", group_info.get("require_two_factor_authentication", False))
+
+        # set description ensure limit character length
+        description = group_info.get("description", "")
+        group_resource.description = description[:256]
+
+        # discover groups users
+        group_users = self._gl_api_get(f"/api/v4/groups/{group_id}/members")
+        for user in group_users:
+            local_user = self.add_user(user)
+            local_user.add_group(group_id)
+            if user.get("access_level", 0) > 0:
+                user_role = self._map_access_level(user["access_level"])
+
+                local_user.add_role(user_role, resources=[group_resource])
+
+        # projects
+        group_projects = self._gl_api_get(f"/api/v4/groups/{group_id}/projects")
+        for project in group_projects:
+            self.add_project(project, group_resource)
+
+        # sub groups
+        sub_groups = self._gl_api_get(f"/api/v4/groups/{group_id}/subgroups")
+        for sub_group in sub_groups:
+            sub_group_id = sub_group.get("id")
+            self.discover_group(sub_group_id, parent_group_resource=group_resource)
+
+        return group_resource
+
+    def add_project(self, project: dict, group_resource: CustomResource) -> None:
+        """Add a project to the OAA Custom Application
+
+        Args:
+            project (dict): API response with Project details
+            group_resource (CustomResource): OAA resource representing parent group for project
         """
-        # group_name = project["namespace"]["name"]
-        # apply group members to project based on their permissions
 
-        # group_members = self.__gl_api_get(f"/api/v4/groups/{group_id}/members")
-        for user_name, access_role in self.group_user_access_levels[group_id].items():
-            log.debug(f"Assigning {user_name} {access_role} to {resource.name}")
-            self.app.local_users[user_name].add_role(access_role, [resource])
+        # since we aren't currently tracking by group space use full path for project name
+        project_name = project['name_with_namespace']
+        project_id = project['id']
+        description = project['description']
+        log.debug(f"Project - {project_name}")
+        project_resource = group_resource.add_sub_resource(project_name, unique_id=project_id, resource_type="project")
+        project_resource.set_property("gitlab_id", project_id)
 
-        # group_details = self.__gl_api_get(f"/api/v4/groups/{group_id}")
-        if self.group_parent_ids[group_id]:
-            log.debug(f"Recursive call to assign parent group {self.group_parent_ids[group_id]}")
-            self.assign_group_permissions(resource, self.group_parent_ids[group_id])
+        description = project.get("description", "")
+        project_resource.description = description[:256]
+
+        # get individual member permissions
+        # project_members = self._gl_api_get(f"api/v4/projects/{project_id}/members/all")
+        project_members = self._gl_api_get(f"api/v4/projects/{project_id}/members")
+        for member in project_members:
+            user_name = member['username']
+            user_id = member["id"]
+            access_role = self._map_access_level(member['access_level'])
+            log.debug(f"Assigning {user_name} {access_role} to {project_name}")
+            if user_id not in self.app.local_users:
+                self.add_user(member)
+
+            self.app.local_users[user_id].add_role(access_role, [project_resource])
+
+        visibility = project["visibility"]
+        project_resource.set_property("visibility", visibility)
+        if visibility == "private":
+            # private project, accessible only by group members and direct permissions, nothing to do
+            log.debug(f"{project_name} is private repo, not additional permissions to add")
+        elif visibility == "internal":
+            # internal repo, any logged in user has view
+            log.debug(f"{project_name} is internal repo, adding '{self.member_group_name}' for group {self.member_group_name}")
+            self.app.local_groups[self.member_group_name].add_role(self.member_role_name, [project_resource])
+        elif visibility == "public":
+            # public repo add view for all internal users
+            log.debug(f"{project_name} is public repo, adding '{self.member_group_name}' for group {self.member_group_name}")
+            self.app.local_groups[self.member_group_name].add_role(self.member_role_name, [project_resource])
 
         return
 
-    def __gl_api_get(self, path: str, params: dict = {}) -> dict:
-        """ GitLab API GET
+    def _gl_api_get(self, path: str, params: dict = None) -> list|dict:
+        """GitLab API GET
 
         Parameters:
         path (string): API path relative to gitlab_url
@@ -318,21 +412,6 @@ class OAAGitLab():
 
         return result
 
-
-def log_arg_error(arg: str = None, env: str = None) -> None:
-    """ helper function to generate consistent log messages when required parameter cannot be loaded """
-
-    if arg and env:
-        log.error(f"Unable to load required parameter, must supply {arg} or set OS environment variable {env}")
-    elif arg and not env:
-        log.error(f"Unable to load required parameter, must supply {arg}")
-    elif env:
-        log.error(f"Unable to load required parameter, must set OS environment variable {env}")
-    else:
-        raise Exception("Must provide arg or env to include in error message")
-    return
-
-
 def run(gitlab_url: str, gitlab_access_token: str, veza_url: str, veza_user: str, veza_api_key: str, save_json: bool = False, verbose: bool = False) -> None:
     """ run full OAA process, discovery GitLab entities, perpare OAA template and push to Veza """
     # log.basicConfig(format='%(asctime)s %(levelname)s: %(message)s', level=log.INFO)
@@ -372,7 +451,7 @@ def run(gitlab_url: str, gitlab_access_token: str, veza_url: str, veza_user: str
 
     # push data
     try:
-        response = veza_con.push_application(provider_name, data_source_name=gitlab_app.deployment_name, application_object=gitlab_app.app, save_json=save_json)
+        response = veza_con.push_application(provider_name, data_source_name=gitlab_app.datasource_name, application_object=gitlab_app.app, save_json=save_json)
         if response.get("warnings", None):
             log.warning("Push succeeded with warnings:")
             for e in response["warnings"]:
@@ -393,7 +472,7 @@ def main() -> None:
     log = logging.getLogger()
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--gitlab-url", default=os.getenv("GITLAB_URL"), help="GitLab URL to discover")
+    parser.add_argument("--gitlab-url", default=os.getenv("GITLAB_URL", "https://gitlab.com"), help="GitLab URL to discover")
     parser.add_argument("--veza-url", default=os.getenv("VEZA_URL"), help="Veza URL for OAA connection")
     parser.add_argument("--veza-user", default=os.getenv("VEZA_USER"), help="Veza user for API connection")
     parser.add_argument("--save-json", action="store_true", help="Save OAA JSON payload to file")
@@ -405,18 +484,18 @@ def main() -> None:
     veza_user = args.veza_user
     # ensure all require command line args are present or discovered from OS environment
     if not gitlab_url:
-        log_arg_error("--gitlab-url", "GITLAB_URL")
+        oaautils.log_arg_error(log, "--gitlab-url", "GITLAB_URL")
     if not veza_url:
-        log_arg_error("--veza-url", "VEZA_URL")
+        oaautils.log_arg_error(log, "--veza-url", "VEZA_URL")
 
     # security values can only be loaded through OS environment
     gitlab_access_token = os.getenv("GITLAB_ACCESS_TOKEN")
     if not gitlab_access_token:
-        log_arg_error(env="GITLAB_ACCESS_TOKEN")
+        oaautils.log_arg_error(log, env="GITLAB_ACCESS_TOKEN")
 
     veza_api_key = os.getenv("VEZA_API_KEY")
     if not veza_api_key:
-        log_arg_error(env="VEZA_API_KEY")
+        oaautils.log_arg_error(log, env="VEZA_API_KEY")
 
     if None in [gitlab_url, gitlab_access_token, veza_url, veza_api_key]:
         log.error("Missing one or more required parameters")
@@ -424,10 +503,14 @@ def main() -> None:
 
     try:
         run(gitlab_url, gitlab_access_token, veza_url, veza_user, veza_api_key, save_json=args.save_json, verbose=args.verbose)
-    except Exception:
+    except OAAClientError as e:
+        log.error(e)
         log.error("Exiting with error")
         sys.exit(1)
 
 
 if __name__ == '__main__':
+    # replace the log with the root logger if running as main
+    log = logging.getLogger()
+    logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s', level=logging.INFO)
     main()

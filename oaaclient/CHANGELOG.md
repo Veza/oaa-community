@@ -1,5 +1,20 @@
 # OAA Client Change Log
 
+## 2022/10/26
+* Improvements for group `unique_id` handling of non-string values.
+* Check for user or group not already a member before adding to group
+
+## 2022/10/17
+* Added support for resource unique identifier separte from `name`.
+  * `add_resource` and `add_sub_resource` functions allow new optional property `unique_id`
+  * When `unique_id` is provided it will serve as the key for the resource in the `.resources` and `.sub_resources` dictionaries
+  * To use `unique_id` all resources must use `unique_id`
+  * When using `unique_id` name does not need to be unique for a resource
+
+## 2022/10/14
+* Optimization to payload size for unset entities
+* Fix for boolean local user properties in payload
+
 ## 2022/09/28
 
 * Update to LocalRole payload logic to remove duplicate permissions 

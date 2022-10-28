@@ -76,6 +76,8 @@ def generate_app():
         user.set_property("peers", username_list)
         user.set_property("birthday", "2000-01-01T00:00:00.000Z")
 
+    app.local_users["marry"].is_active = False
+
     # groups
     app.property_definitions.define_local_group_property("group_id", OAAPropertyType.NUMBER)
     group1 = app.add_local_group("group1")
@@ -224,7 +226,7 @@ GENERATED_APP_PAYLOAD = """
             "group1",
             "group2"
           ],
-          "is_active": true,
+          "is_active": false,
           "created_at": "2001-01-01T00:00:00.000Z",
           "last_login_at": "2002-02-01T00:00:00.000Z",
           "deactivated_at": "2003-03-01T00:00:00.000Z",
@@ -481,10 +483,6 @@ GENERATED_APP_PAYLOAD = """
       ]
     },
     {
-      "identity": "sue",
-      "identity_type": "local_user"
-    },
-    {
       "identity": "rob",
       "identity_type": "local_user",
       "application_permissions": [
@@ -503,10 +501,6 @@ GENERATED_APP_PAYLOAD = """
       ]
     },
     {
-      "identity": "group1",
-      "identity_type": "local_group"
-    },
-    {
       "identity": "group2",
       "identity_type": "local_group",
       "role_assignments": [
@@ -519,10 +513,6 @@ GENERATED_APP_PAYLOAD = """
           ]
         }
       ]
-    },
-    {
-      "identity": "group3",
-      "identity_type": "local_group"
     }
   ]
 }

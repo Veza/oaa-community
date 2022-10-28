@@ -207,27 +207,45 @@ class CustomApplication(Application):
 
         return self.custom_permissions[name]
 
-    def add_resource(self, name: str, resource_type: str, description: str = None) -> CustomResource:
+    def add_resource(self, name: str, resource_type: str, description: str = None, unique_id: str = None) -> CustomResource:
         """ Create a new resource under the application.
 
         Resource type is used to group and filter application resources. It should be consistent for all common resources of an application.
 
         Returns new resource object.
 
+        Resource is identified by `name` by default unless `unique_id` is provided. `name` must be unique if not using `unique_id`.
+
+        Resources can be referenced after creation using the `.resources` dictionary attribute. Dictionary is keyed by unique_id or name if not using
+        unique_id. Use `unique_id` when name is not guaranteed to be unique.
+
         Args:
             name (str): Name of resources
             resource_type (str): Type for resource
             description (str, optional): Description of resources. Defaults to None.
+            unique_id (str, optional): Unique identifier for resource. defaults to None.
 
         Returns:
             CustomResource
         """
 
-        if name in self.resources:
-            raise OAATemplateException(f"Resource {name} already defined")
-        self.resources[name] = CustomResource(name, resource_type, description, application_name=self.name, property_definitions=self.property_definitions)
+        if unique_id:
+            identifier = unique_id
+        else:
+            identifier = name
 
-        return self.resources[name]
+        if identifier in self.resources:
+            raise OAATemplateException(f"Resource identified by {identifier} already defined")
+
+        self.resources[identifier] = CustomResource(name=name,
+                                                    unique_id=unique_id,
+                                                    resource_type=resource_type,
+                                                    description=description,
+                                                    application_name=self.name,
+                                                    property_definitions=self.property_definitions
+                                                   )
+
+        return self.resources[identifier]
 
     def add_local_user(self, name: str, identities: List[str] = None, groups: List[str] = None, unique_id: str = None) -> LocalUser:
         """ Create a new local user for application.
@@ -413,7 +431,7 @@ class CustomApplication(Application):
 
         return
 
-    def get_identity_to_permissions(self) -> dict:
+    def get_identity_to_permissions(self) -> list:
         """ Collect authorizations for all identities into a single list. """
 
         identity_to_permissions = []
@@ -422,7 +440,12 @@ class CustomApplication(Application):
         identities.extend(self.local_groups.values())
         identities.extend(self.idp_identities.values())
         for identity in identities:
-            identity_to_permissions.append(identity.get_identity_to_permissions(application_name=self.name))
+            entry = identity.get_identity_to_permissions(application_name=self.name)
+            if "application_permissions" in entry or "role_assignments" in entry:
+                identity_to_permissions.append(entry)
+            else:
+                # identity has no permissions or roles, pass
+                pass
 
         return identity_to_permissions
 
@@ -435,14 +458,17 @@ class CustomResource():
     is granted. Each resource has a name and a type. The type can be used for grouping and filtering.
 
     Arguments:
-        name (str): display name for resource, must be unique to parent application or resource
+        name (str): display name for resource, must be unique to parent application or resource unless using unique_id
         resource_type (str): type for resource
         description (str): description for resource
         application_name (str): name of parent application
-        resource_key (str): for sub-resources represents the sub-resource's parent path
+        resource_key (str, optional): for sub-resources the full unique identifier required for `identity_to_permissions` section. Defaults to name or unique_id if not provided.
+        property_definitions (ApplicationPropertyDefinitions, optional): Property definitions structure for the resource
+        unique_id (str, optional): Optional unique identifier for the resource. Defaults to None.
 
     Attributes:
         name (str): display name for resource, must be unique to parent application or resource
+        unique_id (str): resource's unique identifier if provided.
         resource_type (str): type for resource
         application_name (str): name of parent application
         resource_key (str): for sub-resources represents the sub-resource's parent path
@@ -451,16 +477,24 @@ class CustomResource():
         tags (list[Tag]): list of tags
     """
 
-    def __init__(self, name: str, resource_type: str, description: str, application_name: str, resource_key: str = None, property_definitions: ApplicationPropertyDefinitions = None) -> None:
+    def __init__(self, name: str, resource_type: str, description: str, application_name: str, resource_key: str = None, property_definitions: ApplicationPropertyDefinitions = None, unique_id: str = None) -> None:
         self.name = name
+        if unique_id:
+            self.unique_id = str(unique_id)
+        else:
+            self.unique_id = None
+
         self.resource_type = resource_type
         self.description = description
         self.application_name = application_name
 
-        if not resource_key:
-            self.resource_key = name
+        # the resource_key is used to identify the resource in the hierarchy
+        if resource_key:
+            self.resource_key = str(resource_key)
+        elif unique_id:
+            self.resource_key = str(unique_id)
         else:
-            self.resource_key = resource_key
+            self.resource_key = str(name)
 
         self.sub_resources = {}
         self.connections = []
@@ -474,6 +508,7 @@ class CustomResource():
         """ Return the dictionary representation of resource."""
 
         repr = {
+            "id": self.unique_id,
             "name": self.name,
             "resource_type": self.resource_type,
             "description": self.description,
@@ -487,26 +522,40 @@ class CustomResource():
         # filter out None/empty values before return
         return {k: v for k, v in repr.items() if v}
 
-    def add_sub_resource(self, name: str, resource_type: str, description: str = None) -> CustomResource:
-        """ Create a new sub-resource under current resource.
+    def add_sub_resource(self, name: str, resource_type: str, description: str = None, unique_id: str = None) -> CustomResource:
+        """ Create a new sub-resource under current resource
 
         Args:
             name (str): display name for resource
             resource_type (str): type for resource
             description (str, optional): String description. Defaults to None.
+            unique_id (str, optional): Unique identifier for new subresource, Defaults to `name`.
 
         Returns:
             CustomResource
         """
 
-        sub_resource_key = f"{self.resource_key}.{name}"
+        if unique_id:
+            identifier = unique_id
+        else:
+            identifier = name
 
-        if name in self.sub_resources:
-            raise Exception(f"Sub-resource {name} already defined")
+        sub_resource_key = f"{self.resource_key}.{identifier}"
 
-        self.sub_resources[name] = CustomResource(name, resource_type, description, self.application_name, sub_resource_key, property_definitions=self.property_definitions)
+        if identifier in self.sub_resources:
+            raise Exception(f"Sub-resource identified by {identifier} already defined")
 
-        return self.sub_resources[name]
+        self.sub_resources[identifier] = CustomResource(name=name,
+                                                  unique_id=unique_id,
+                                                  resource_type=resource_type,
+                                                  description=description,
+                                                  application_name=self.application_name,
+                                                  resource_key=sub_resource_key,
+                                                  property_definitions=self.property_definitions
+                                                  )
+
+
+        return self.sub_resources[identifier]
 
     def add_resource_connection(self, id: str, node_type: str) -> None:
         """ Add an external connection to the resource.
@@ -832,7 +881,13 @@ class LocalUser(Identity):
             group (str): identifier of local group
         """
 
-        self.groups = append_helper(self.groups, group)
+        group = str(group)
+        if self.groups and group in self.groups:
+            return
+        else:
+            self.groups = append_helper(self.groups, group)
+
+        return
 
     def to_dict(self) -> dict:
         """ Output user to dictionary for payload. """
@@ -853,7 +908,7 @@ class LocalUser(Identity):
             user['id'] = self.unique_id
 
         # filter out None/empty values before return
-        return {k: v for k, v in user.items() if v}
+        return {k: v for k, v in user.items() if v not in [None, [], {}]}
 
 
 class LocalGroup(Identity):
@@ -892,8 +947,9 @@ class LocalGroup(Identity):
         Args:
             group (str): identifier of local group
         """
+        group = str(group)
 
-        if group == self.name:
+        if (self.unique_id and self.unique_id == group) or (self.unique_id is None and self.name == group):
             raise OAATemplateException("Cannot add group to self")
 
         self.groups = append_helper(self.groups, group)

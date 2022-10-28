@@ -6,6 +6,7 @@ license that can be found in the LICENSE file or at
 https://opensource.org/licenses/MIT.
 """
 
+from enum import unique
 from oaaclient.templates import CustomApplication, Tag, OAAPermission, OAAPropertyType
 
 def generate_app_id_mapping():
@@ -111,21 +112,21 @@ def generate_app_id_mapping():
     app.property_definitions.define_resource_property("thing", "peers", OAAPropertyType.STRING_LIST)
     app.property_definitions.define_resource_property("thing", "publish_date", OAAPropertyType.TIMESTAMP)
 
-    thing1 = app.add_resource("thing1", resource_type="thing", description="thing1")
+    thing1 = app.add_resource("thing1", unique_id="t1", resource_type="thing", description="thing1")
     thing1.set_property("private", False)
     thing1.set_property("unique_id", 1)
     thing1.set_property("hair_color", "blue")
     thing1.set_property("peers", ["thing2", "thing3"])
     thing1.set_property("publish_date", "1959-03-12T00:00:00.000Z")
 
-    thing2 = app.add_resource("thing2", resource_type="thing")
+    thing2 = app.add_resource("thing2", unique_id="t2", resource_type="thing")
     thing2.set_property("private", False)
     thing2.set_property("unique_id", 2)
     thing2.set_property("hair_color", "blue")
     thing2.set_property("peers", ["thing2", "thing3"])
     thing2.set_property("publish_date", "1959-03-12T00:00:00.000Z")
 
-    cog1 = thing2.add_sub_resource("cog1", resource_type="cog")
+    cog1 = thing2.add_sub_resource("cog1", unique_id="c1", resource_type="cog")
     cog1.add_resource_connection("service_account@some-project.iam.gserviceaccount.com", "GoogleCloudServiceAccount")
 
     # authorizations
@@ -313,6 +314,7 @@ GENERATED_APP_ID_MAPPINGS_PAYLOAD = """
       },
       "resources": [
         {
+          "id": "t1",
           "name": "thing1",
           "resource_type": "thing",
           "description": "thing1",
@@ -328,10 +330,12 @@ GENERATED_APP_ID_MAPPINGS_PAYLOAD = """
           }
         },
         {
+          "id": "t2",
           "name": "thing2",
           "resource_type": "thing",
           "sub_resources": [
             {
+              "id": "c1",
               "name": "cog1",
               "resource_type": "cog",
               "connections": [
@@ -409,10 +413,6 @@ GENERATED_APP_ID_MAPPINGS_PAYLOAD = """
   ],
   "identity_to_permissions": [
     {
-      "identity": "1234",
-      "identity_type": "local_user"
-    },
-    {
       "identity": "1235",
       "identity_type": "local_user",
       "role_assignments": [
@@ -431,8 +431,8 @@ GENERATED_APP_ID_MAPPINGS_PAYLOAD = """
         {
           "application": "pytest unique id app",
           "resources": [
-            "thing2",
-            "thing2.cog1"
+            "t2",
+            "t2.c1"
           ],
           "permission": "view"
         }
@@ -450,15 +450,11 @@ GENERATED_APP_ID_MAPPINGS_PAYLOAD = """
         {
           "application": "pytest unique id app",
           "resources": [
-            "thing1"
+            "t1"
           ],
           "permission": "manage"
         }
       ]
-    },
-    {
-      "identity": "g1",
-      "identity_type": "local_group"
     },
     {
       "identity": "g2",
@@ -469,14 +465,10 @@ GENERATED_APP_ID_MAPPINGS_PAYLOAD = """
           "role": "r2",
           "apply_to_application": false,
           "resources": [
-            "thing1"
+            "t1"
           ]
         }
       ]
-    },
-    {
-      "identity": "g3",
-      "identity_type": "local_group"
     }
   ]
 }

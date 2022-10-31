@@ -1,5 +1,8 @@
 # Jira Connector Change Log
 
+## 2022/10/28
+* Fix for Project Role IDs and actor assignments.
+
 ## 2022/10/24
 * Fix for issue with names not being unique. Jira unique IDs are now used when registering users and groups.
 

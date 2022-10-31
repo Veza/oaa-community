@@ -349,16 +349,17 @@ def process_project(jira_con, oaa_app, project, project_roles, project_permissio
 
     # create a local role (project_id-group_name)
     local_project_role = f"{project_name}-{group_name}"
-    if local_project_role not in oaa_app.local_roles:
+    local_project_role_id = f"project-{project_id}-group-{group_id}"
+    if local_project_role_id not in oaa_app.local_roles:
       role_permissions = groups_to_permissions[group_id].get("permissions", [])
-      oaa_app.add_local_role(local_project_role, unique_id=local_project_role, permissions=role_permissions)
+      oaa_app.add_local_role(local_project_role, unique_id=local_project_role_id, permissions=role_permissions)
 
     # add authorization to the group
     local_group = oaa_app.local_groups.get(group_id)
     if not local_group:
       log.warning(f"Group not properly created, {group_name}, {group_id}")
       continue
-    local_group.add_role(role=local_project_role, resources=[oaa_app.resources.get(project_name)])
+    local_group.add_role(role=local_project_role_id, resources=[oaa_app.resources.get(project_name)])
 
   # iterate the roles_to_permissions dict and add authorization to users who have the role
   for role in roles_to_permissions:
@@ -368,20 +369,26 @@ def process_project(jira_con, oaa_app, project, project_roles, project_permissio
 
     # create a local role (project_id-role_name)
     local_project_role = f"{project_name}-{roles_to_permissions[role].get('name')}"
+    local_project_role_id = f"project-{project_id}-role-{role}"
 
-    if local_project_role not in oaa_app.local_roles:
-      oaa_app.add_local_role(local_project_role, unique_id=local_project_role, permissions=roles_to_permissions[role].get("permissions"))
+    if local_project_role_id not in oaa_app.local_roles:
+      oaa_app.add_local_role(local_project_role, unique_id=local_project_role_id, permissions=roles_to_permissions[role].get("permissions"))
 
     # associate role to users
     for actor in role_details.get("actors"):
-      actor_name = actor.get("displayName")
+      if actor.get("actorGroup"):
+        # group actor
+        group_id = actor["actorGroup"].get("groupId")
+        if group_id in oaa_app.local_groups:
+          oaa_app.local_groups[group_id].add_role(role=local_project_role_id, resources=[oaa_app.resources.get(project_name)])
+      elif actor.get("actorUser"):
+        # user actor
+        user_id = actor["actorUser"].get("accountId")
+        if user_id in oaa_app.local_users:
+          oaa_app.local_users[user_id].add_role(role=local_project_role_id, resources=[oaa_app.resources.get(project_name)])
+      else:
+        log.warning(f"Unable to determine type for role actor: type: {actor.get('type')}, project-role: {local_project_role_id}")
 
-      # add the authorization to the user
-      if actor_name in oaa_app.local_users:
-        oaa_app.local_users.get(actor_name).add_role(role=local_project_role, resources=[oaa_app.resources.get(project_name)])
-
-      if actor_name in oaa_app.local_groups:
-        oaa_app.local_groups.get(actor_name).add_role(role=local_project_role, resources=[oaa_app.resources.get(project_name)])
 
   oaa_app.resources[project_name].set_property("private", project['isPrivate'])
 

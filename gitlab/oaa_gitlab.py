@@ -59,6 +59,8 @@ class OAAGitLab():
         else:
             self.gitlab_url = f"https://{gitlab_url}"
 
+        self.gitlab_url= self.gitlab_url.strip("/")
+
         if not deployment_name:
             self.deployment_name = self.gitlab_url.split("://")[1]
         else:
@@ -335,8 +337,9 @@ class OAAGitLab():
         project_resource = group_resource.add_sub_resource(project_name, unique_id=project_id, resource_type="project")
         project_resource.set_property("gitlab_id", project_id)
 
-        description = project.get("description", "")
-        project_resource.description = description[:256]
+        description = project.get("description")
+        if description and isinstance(description, str):
+            project_resource.description = description[:256]
 
         # get individual member permissions
         # project_members = self._gl_api_get(f"api/v4/projects/{project_id}/members/all")
@@ -380,6 +383,9 @@ class OAAGitLab():
         Raises:
         HTTPError
         """
+        if not params:
+            params = {}
+
         headers = {}
         headers['authorization'] = f"Bearer {self.access_token}"
         path = path.lstrip("/")

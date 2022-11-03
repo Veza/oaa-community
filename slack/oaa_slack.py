@@ -70,23 +70,23 @@ class OAA_Slack_Connector():
         for user in users_list.data.get("members", []):
             id = user.get("id")
             name = user.get("profile", {}).get("real_name_normalized")
-            if not name:
-                log.warning("User has not name")
-                continue
+            display_name = user.get("profile", {}).get("display_name_normalized")
 
+            if display_name:
+                user_name = display_name
+            elif name:
+                user_name = name
+            else:
+                # fall back on id
+                log.warning(f"Unable to determine a name for user {id}")
+                user_name = id
 
             deleted = user.get("deleted")
             invited_user = user.get("is_invited_user")
             email = user.get("profile", {}).get("email")
-            display_name = user.get("profile", {}).get("display_name_normalized")
 
             is_bot = user.get("is_bot")
             bot_id = user.get("profile", {}).get("bot_id")
-
-            if display_name:
-                user_name = display_name
-            else:
-                user_name = name
 
             oaa_user = self.app.add_local_user(name=user_name, unique_id=id)
             if email:
@@ -137,6 +137,9 @@ class OAA_Slack_Connector():
 
             user_list = self.client.usergroups_users_list(usergroup=group_id)
             for member_id in user_list.data.get("users", []):
+                if member_id not in self.app.local_users:
+                    log.warning(f"Found member of group that is not in user list: user_id: {member_id}")
+                    continue
                 self.app.local_users[member_id].add_group(group_id)
 
         return

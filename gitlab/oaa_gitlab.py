@@ -213,14 +213,11 @@ class OAAGitLab():
         user_id = user_info["id"]
         if user_id not in self.app.local_users:
             local_user = self.app.add_local_user(user_name, unique_id=user_id)
-        else:
-            local_user = self.app.local_users[user_id]
 
             local_user.created_at = user_info.get("created_at")
             local_user.last_login_at = user_info.get("last_sign_in_at")
             local_user.set_property("gitlab_id", user_info['id'])
 
-            # TODO in SaaS this appears to be `is_using_seat`
             if user_info.get("using_license_seat"):
                 local_user.set_property("is_licensed",  user_info['using_license_seat'])
 

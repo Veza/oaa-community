@@ -1,5 +1,8 @@
 # GitLab Connector Change Log
 
+## 2022/11/3
+* Fix for GitLab setting GitLab user properties during discovery 
+
 ## 2022/10/27
 * Updates to support both GitLab self-hosted and SaaS with connector
 * GitLab Groups are now represented by both a Local Group and a Resource with Projects as sub-resources

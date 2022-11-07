@@ -1,5 +1,8 @@
 # GitHub Connector Change Log
 
+## 2022/11/03
+* Support passing GitHub URL as command line argument (`--github-url`) or environment variable (`GITHUB_URL`) for GitHub Enterprise
+
 ## 2022/09/23
 * Updated README and error messages
 

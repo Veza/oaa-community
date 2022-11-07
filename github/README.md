@@ -17,30 +17,30 @@ Once extracted, the metadata payload is pushed to a Veza instance for parsing. R
 
 This connector uses the OAA Application template to map applications and identities to permissions. The following table shows how Custom Application entities correspond to GitHub entities:
 
-Github                        | Generic Application
-------------------------------|---------------------
-organization                  | Application
-members                       | Local User
-team                          | Local Group
-organization owners           | Local Role
-default repository permission | Local Role
-repository                    | Application Resource
+| Github                        | Generic Application  |
+| ----------------------------- | -------------------- |
+| organization                  | Application          |
+| members                       | Local User           |
+| team                          | Local Group          |
+| organization owners           | Local Role           |
+| default repository permission | Local Role           |
+| repository                    | Application Resource |
 
 ### Custom Properties
 
 The following properties are set based on the GitHub properties
 
-Entity     | Property                   | Description
------------|----------------------------|-----------------------------------------------------------------------------------------------
-User       | `OutsideCollaborator`     | Boolean for users who are not a member of the org that are invited to one or more repositories
-User       | `profile_name`             | The name the user has set in their profile
-User       | `emails`                   | List of emails discovered for the user
-Repository | `private`                  | Boolean `true` if repository is not public
-Repository | `visibility`               | Repo visibility, may be `public`, `private` or `internal`
-Repository | `default_branch`           | Default branch for repository, branch name tested `default_branch_protected`
-Repository | `default_branch_protected` | Boolean `true` if any protections enabled on default branch
-Repository | `allow_forking`            | Boolean if private forks are allowed
-Repository | `is_fork`                  | Boolean if repository is fork of another
+| Entity     | Property                   | Description                                                                                    |
+| ---------- | -------------------------- | ---------------------------------------------------------------------------------------------- |
+| User       | `OutsideCollaborator`      | Boolean for users who are not a member of the org that are invited to one or more repositories |
+| User       | `profile_name`             | The name the user has set in their profile                                                     |
+| User       | `emails`                   | List of emails discovered for the user                                                         |
+| Repository | `private`                  | Boolean `true` if repository is not public                                                     |
+| Repository | `visibility`               | Repo visibility, may be `public`, `private` or `internal`                                      |
+| Repository | `default_branch`           | Default branch for repository, branch name tested `default_branch_protected`                   |
+| Repository | `default_branch_protected` | Boolean `true` if any protections enabled on default branch                                    |
+| Repository | `allow_forking`            | Boolean if private forks are allowed                                                           |
+| Repository | `is_fork`                  | Boolean if repository is fork of another                                                       |
 
 ## Setup
 
@@ -111,6 +111,17 @@ export GITHUB_KEY_BASE64=$(cat path/to/private-key.pem | base64)
 
 When `GITHUB_KEY_BASE64` is set, the `--key-file` argument is not required.
 
+To connect GitHub Enterprise instance provide the URL to use for GitHub API calls:
+
+```shell
+./oaa_github.py \
+--app-id <GitHub App ID e.g. 123456> \
+--key-file path/to/connector.private-key.pem \
+--org <GitHub Org Name e.g. demo-org> \
+--github-url <https://yourgithub.example.com> \
+--veza-url https://<your-org>.vezacloud.com
+```
+
 ### Container
 
 A `Dockerfile` to build a container is included in the repository..
@@ -145,6 +156,20 @@ Run using Base64-encoded key as variable:
   -e VEZA_API_KEY=<Veza API Key> \
   oaa_github
   ```
+
+### Parameters
+| CLI Parameter  | Environment Variable | Description                                                                         |
+| -------------- | -------------------- | ----------------------------------------------------------------------------------- |
+| `--org`        | `GITHUB_ORG`         | Name of GitHub organization to discover                                             |
+| `--app-id`     | `GITHUB_APP_ID`      | ID of GitHub app to use for authentication                                          |
+| `--key-file`   | `GITHUB_KEY`         | Path to private key for GitHub App authentication                                   |
+| n/a            | `GITHUB_KEY_BASE64`  | Base64 encoded key file as string. Optional as alternative to passing key file path |
+| `--github-url` | `GITHUB_URL`         | Optional URL for GitHub Enterprise connection                                       |
+| `--veza-url`   | `VEZA_URL`           | URL for Veza instance                                                               |
+| n/a            | `VEZA_API_KEY`       | Veza API key                                                                        |
+| `--user-map`   | `GITHUB_USER_MAP`    | Optional path to CSV file for GitHub user name to identity mapping                  |
+| `--save-json`  | n/a                  | Save OAA JSON payload to file                                                       |
+| n/a            | `OAA_DEBUG`          | Optional flag to enable verbose debug logging                                       |
 
 ## Notes
 

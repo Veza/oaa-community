@@ -336,7 +336,7 @@ class OAAGitHub():
         total_users = 0
         users_with_identity = 0
         while True:
-            result = gh_graph_run(query,auth_token=self.access_token, variables=variables)
+            result = gh_graph_run(query,auth_token=self.access_token, variables=variables, graph_url=f"{self.github_url}/graphql")
             for e in result["data"]["organization"]["membersWithRole"]["edges"]:
                 total_users += 1
                 login = e["node"]["login"]
@@ -421,7 +421,7 @@ class OAAGitHub():
         team_after = None
         while True:
             variables["team_after"] = team_after
-            result = gh_graph_run(query,auth_token=self.access_token, variables=variables)
+            result = gh_graph_run(query,auth_token=self.access_token, variables=variables,  graph_url=f"{self.github_url}/graphql")
             team = result["data"]["organization"]["teams"]["edges"][0]["node"]
             team_name = team["name"]
             team_slug = team["slug"]
@@ -460,7 +460,7 @@ class OAAGitHub():
 
                 if node["members"]["pageInfo"]["hasNextPage"] or node["childTeams"]["pageInfo"]["hasNextPage"]:
                     # more users or child teams to discover, re-run the query with updated cursors
-                    result = gh_graph_run(query,auth_token=self.access_token, variables=variables)
+                    result = gh_graph_run(query,auth_token=self.access_token, variables=variables, graph_url=f"{self.github_url}/graphql")
                 else:
                     # no more team members or child groups to discover
                     break
@@ -718,7 +718,7 @@ def load_user_map(oaa_app, user_map):
             exit(1)
 
 
-def run(org_name, app_id, veza_url, oaa_user, veza_api_key, key_file=None, base64_key=None, user_map=None, save_json=False):
+def run(org_name, app_id, veza_url, oaa_user, veza_api_key, key_file=None, base64_key=None, user_map=None, save_json=False, github_url=None):
 
     if os.getenv("OAA_DEBUG"):
         log.setLevel(logging.DEBUG)
@@ -731,13 +731,31 @@ def run(org_name, app_id, veza_url, oaa_user, veza_api_key, key_file=None, base6
         log.error(e.message)
         exit(1)
 
+    # format github url or set default
+    if github_url and re.match(r"^https:\/\/.*", github_url):
+        github_url = github_url
+    elif github_url:
+        github_url = f"https://{github_url}"
+    else:
+        log.debug("Setting GitHub URL to default")
+        github_url = "https://api.github.com"
+    github_url = github_url.strip("/")
+
+    log.info(f"GitHub URL: {github_url}")
     # use Github App API to retrieve authentication token for organization
-    org_token = gh_get_org_auth(app_id, org_name, key_file=key_file, base64_key=base64_key)
+    try:
+        org_token = gh_get_org_auth(app_id, org_name, key_file=key_file, base64_key=base64_key, github_url=github_url)
+    except HTTPError as e:
+        log.error("Error requesting GitHub organization token, check that credentials are valid")
+        log.error(e)
+        log.error("Exiting")
+        sys.exit(1)
+
     if org_token:
-        log.info(f"Retrieved token for orgination {org_name}, starting discovery")
+        log.info(f"Retrieved token for organization {org_name}, starting discovery")
 
     # instantiate an instance of the OAAGitHub class, this class represents an Org and creates an OAA app
-    oaa_app = OAAGitHub(org_name, org_token)
+    oaa_app = OAAGitHub(org_name, org_token, github_url=github_url)
 
     try:
         oaa_app.discover_org()
@@ -804,7 +822,8 @@ def main():
     parser.add_argument("--org", required=False, default=os.getenv("GITHUB_ORG"), help="Github Org slug to parse.")
     parser.add_argument("--app-id", type=int, required=False, default=os.getenv("GITHUB_APP_ID"), help="Github App ID")
     parser.add_argument("--key-file", required=False, default=os.getenv("GITHUB_KEY"), help="PEM keyfile for Github App authentication")
-    parser.add_argument("--user-map", type=str, required=False, default=os.getenv("GITHUB_USER_MAP"), help="optional csv user map for GitHub user names to email identites")
+    parser.add_argument("--user-map", type=str, required=False, default=os.getenv("GITHUB_USER_MAP"), help="optional csv user map for GitHub user names to email identities")
+    parser.add_argument("--github-url", type=str, required=False, default=os.getenv("GITHUB_URL"), help="URL for GitHub API server, defaults to https://api.github.com")
     parser.add_argument("--veza-url", required=False, default=os.getenv("VEZA_URL"), help="Hostname for Veza deployment")
     parser.add_argument("--oaa-user", required=False, default=os.getenv("OAA_USER"), help="Veza username for OAA connection")
     parser.add_argument("--save-json", action="store_true", help="Save OAA JSON payload to file")
@@ -817,6 +836,7 @@ def main():
     oaa_user = args.oaa_user
     save_json = args.save_json
     user_map = args.user_map
+    github_url = args.github_url
 
     # security tokens can only come from OS environment
     base64_key = os.getenv("GITHUB_KEY_BASE64")
@@ -839,7 +859,7 @@ def main():
         log.error("GitHub API not provided via --key-file or one of OS environment GITHUB_KEY or GITHUB_KEY_BASE64")
         sys.exit(1)
 
-    run(org_name, app_id, veza_url, oaa_user, veza_api_key, key_file=key_file, base64_key=base64_key, user_map=user_map, save_json=save_json)
+    run(org_name, app_id, veza_url, oaa_user, veza_api_key, key_file=key_file, base64_key=base64_key, user_map=user_map, save_json=save_json, github_url=github_url)
 
 
 if __name__ == '__main__':

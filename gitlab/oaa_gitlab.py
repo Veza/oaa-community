@@ -73,8 +73,8 @@ class OAAGitLab():
         try:
             calling_user = self._gl_api_get("/api/v4/user")
         except HTTPError as e:
-            log.error(f"Error calling GitLab API ({e.response.status_code})")
-            raise(HTTPError)
+            log.error(f"Error validating API token")
+            raise(e)
 
         self.calling_as_admin = False
         if calling_user.get("is_admin"):
@@ -234,7 +234,7 @@ class OAAGitLab():
 
             # SAML identity for SSO should be available if configured
             if user_info.get("group_saml_identity"):
-                external_id = user_info["group_saml_identity"].user_info("extern_uid")
+                external_id = user_info["group_saml_identity"].get("extern_uid")
                 local_user.add_identities(external_id)
                 # set property for local_user is saml enabled
                 local_user.set_property("saml_login", True)
@@ -411,7 +411,7 @@ class OAAGitLab():
                     except json.decoder.JSONDecodeError:
                         raise HTTPError("Could not JSON decode API response", response=response)
             else:
-                raise HTTPError(response.text, response=response)
+                raise HTTPError(response.text, request=response.request, response=response)
 
         return result
 

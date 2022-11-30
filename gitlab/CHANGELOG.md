@@ -1,7 +1,10 @@
 # GitLab Connector Change Log
 
+## 2022/11/30
+* Fix for collecting external user ID for self-hosted SSO users
+
 ## 2022/11/3
-* Fix for GitLab setting GitLab user properties during discovery 
+* Fix for GitLab setting GitLab user properties during discovery
 
 ## 2022/10/27
 * Updates to support both GitLab self-hosted and SaaS with connector

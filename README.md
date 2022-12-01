@@ -33,12 +33,13 @@ Veza API to import the data into Veza. Using OAA and connectors, organizations c
 metadata for custom SaaS apps and create a more complete view of permissions across cloud/data/identity systems to
 answer the question: “who can and should take what action on what data?”
 
-Open Authorization API is not currently associated with any open source bodies (IETF, etc.). We will be working with 
+Open Authorization API is not currently associated with any open source bodies (IETF, etc.). We will be working with
 various teams to pursue open standards over course of time. All OAA resources in this repository are licensed under
 the MIT license.
 
-For any feedback on Open Authorization API - for example, API enrichments, etc. - please open an issue. We encourage you 
-to please join our [Slack community](https://join.slack.com/t/veza-world/shared_invite/zt-17d9quyiq-20JMp0ikZ0pVNz_e5W5j7Q) to share the feedback.
+For any feedback on Open Authorization API - for example, API enrichments, etc. - please open an issue. We encourage you
+to please join our [Slack community](https://join.slack.com/t/veza-world/shared_invite/zt-17d9quyiq-20JMp0ikZ0pVNz_e5W5j7Q)
+to share the feedback.
 
 ## How OAA Works
 OAA works by providing a mechanism to upload authorization information from a target system (e.g. SaaS app,
@@ -71,7 +72,7 @@ To get started developing your own connectors:
 * See the samples directory:
   * `sample-app.py` - sample generic application, suitable for most SaaS apps.
   * `sample-idp.py` - sample custom identity provider, for IdPs and other identity related services
-* Use the `oaaclient` SDK for developing your own connectors in Python
+* Use the `oaaclient` SDK for developing your own connectors in Python. See [OAAClient GitHub repo](https://github.com/Veza/oaaclient-py) for more information.
 
 ## Connectors
 

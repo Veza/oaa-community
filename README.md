@@ -3,7 +3,7 @@
 
 To help customers get up and running quickly using Open Authorization API (OAA) we created the Veza OAA Community. This
 repository includes libraries for developing new connectors, several pre-built connectors, examples and documentation.
-The connectors in the repository (for JIRA, for Zendesk, etc.) are ready for immediate use by following the
+The connectors in the repository (for JIRA, etc.) are ready for immediate use by following the
 instruction in each connectors README.
 
 Veza customers and partners can use the community as a resource for developing their own connectors and tooling, and are
@@ -87,7 +87,6 @@ Jira            | Veza Supported | Python   | Jira Cloud support for projects
 Looker          | Veza Supported | Python   | Looker User authorization for models and connections
 PagerDuty       | Veza Supported | Python   | PagerDuty user roles and teams
 Slack           | Veza Supported | Python   | Slack workspace members and roles
-Zendesk         | Veza Supported | Python   | Zendesk user to role assignments
 
 ### Support Levels
 #### Veza Supported

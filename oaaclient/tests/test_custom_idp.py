@@ -38,7 +38,7 @@ def test_custom_idp():
     # add users to groups
     user001.add_groups(["group001"])
     user002.add_groups(["group002"])
-    idp.users["user003"].add_groups(["group001", "group002"])
+    idp.users["user003_identity"].add_groups(["group001", "group002"])
 
     user001.add_assumed_role_arns(["arn:aws:iam::123456789012:role/role001", "arn:aws:iam::123456789012:role/role002"])
     # test adding a role multiple times is deduplicated property
@@ -46,9 +46,9 @@ def test_custom_idp():
     user002.add_assumed_role_arns(["arn:aws:iam::123456789012:role/role001"])
 
     payload = idp.get_payload()
-    print(json.dumps(payload, indent=2))
 
     expected_result = json.loads(TEST_CUSTOM_IDP_RESULT)
+
     assert payload == expected_result
 
 

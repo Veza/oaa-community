@@ -107,9 +107,12 @@ def generate_app():
     role1.set_property("role_id", 1)
     role1.set_property("custom", False)
 
-    role2 = app.add_local_role("role2", ["view"])
+    role2 = app.add_local_role("role2")
+    role2.add_permissions(["view"])
     role2.set_property("role_id", 1)
     role1.set_property("custom", True)
+
+    app.add_local_role("empty_role")
 
     # resources
     app.property_definitions.define_resource_property("thing", "private", OAAPropertyType.BOOLEAN)
@@ -338,6 +341,12 @@ GENERATED_APP_PAYLOAD = """
           "custom_properties": {
             "role_id": 1
           }
+        },
+        {
+          "name": "empty_role",
+          "permissions": [],
+          "tags": [],
+          "custom_properties": {}
         }
       ],
       "tags": [],

@@ -10,22 +10,28 @@ license that can be found in the LICENSE file or at
 https://opensource.org/licenses/MIT.
 """
 
-from datetime import datetime
-from enum import Enum
-from requests.exceptions import JSONDecodeError as RequestsJSONDecodeError
-from typing import Union, List
+from __future__ import annotations
+
 import argparse
 import base64
 import gzip
 import json
 import logging
 import os
+import socket
 import re
-import requests
 import sys
+from datetime import datetime
+from enum import Enum
 
-from oaaclient.templates import CustomApplication, CustomIdPProvider
+import requests
+from requests.adapters import HTTPAdapter
+from requests.exceptions import JSONDecodeError as RequestsJSONDecodeError
+from urllib3.util.retry import Retry
+from urllib.parse import urlsplit, urlencode
+
 import oaaclient.utils as oaautils
+from oaaclient.templates import CustomApplication, CustomIdPProvider
 
 PROVIDER_ICON_MAX_SIZE = 64_000
 
@@ -44,7 +50,6 @@ class OAAClientError(Exception):
     """
 
     def __init__(self, error: str, message:str , status_code: int = None, details: list = None) -> None:
-        Exception.__init__(self, f"{error}: {message}")
         self.error = error
         self.message = message
         self.status_code = status_code
@@ -53,6 +58,13 @@ class OAAClientError(Exception):
         else:
             self.details = details
 
+        super().__init__(self, f"{error}: {message}")
+
+class OAAResponseError(OAAClientError):
+    """ Error returned from API Call"""
+
+class OAAConnectionError(OAAClientError):
+    """ Error with API Connection"""
 
 class OAAClient():
     """OAA API Connection and Management.
@@ -65,6 +77,7 @@ class OAAClient():
         api_key (str): Veza API key.
         username (str, optional): Not used (legacy). Defaults to None.
         token (str, optional): legacy parameter name for API key. Defaults to None.
+        skip_validation (bool, optional): skip test API call to validate host and credentials. Defaults to False.
 
     Attributes:
         url (str): URL of the Veza instance to connect to
@@ -74,6 +87,21 @@ class OAAClient():
     Raises:
         OAAClientError: For errors connecting to API and if API returns errors
     """
+    # maximum number of times to retry a API calls, can be set with environment variable OAA_API_RETRIES
+    DEFAULT_RETRY_COUNT = 10
+    # Backoff multiplier factor for time between API retries in seconds
+    # Back time exponential formula: {backoff factor} * (2 ^ ({retry number} - 1))
+    DEFAULT_RETRY_BACKOFF_FACTOR = 0.6
+    # maximum amount of time to backoff for between calls
+    DEFAULT_RETRY_MAX_BACKOFF = 30
+
+    # platform defined allowed characters for use unless otherwise allowed defined
+    ALLOWED_CHARACTERS = r"^[ @#$%&*:()!,a-zA-Z0-9_'\"=.-]*$"
+
+    # default number of entities to get when requesting a page size.
+    # Must be passed with params for API call when calling paging APIs `params={"page_size": self.DEFAULT_PAGE_LENGTH}`
+    DEFAULT_PAGE_SIZE = 250
+
     def __init__(self, url:str, api_key: str = None, username: str = None, token: str = None):
         if not re.match(r"^https:\/\/.*", url):
             self.url = f"https://{url}"
@@ -103,17 +131,31 @@ class OAAClient():
         # enable payload compression by default, connection object property can be set to False to disable
         self.enable_compression = True
 
-        # test connection to validate host and credentials
-        providers = self.get_provider_list()
+        # setup retry strategy for API calls
 
-    def get_provider_list(self) -> List[dict]:
+        try:
+            retry_count = int(os.getenv("OAA_API_RETRIES", self.DEFAULT_RETRY_COUNT))
+        except ValueError:
+            log.error(f"OAA_API_RETRIES variable must be integer, ignoring and setting to default {self.DEFAULT_RETRY_COUNT}")
+            retry_count = self.DEFAULT_RETRY_COUNT
+
+        retry_policy = OAARetry(backoff_max=self.DEFAULT_RETRY_MAX_BACKOFF, total=retry_count, backoff_factor=self.DEFAULT_RETRY_BACKOFF_FACTOR, status_forcelist=[429, 500, 502, 503, 504])
+        adapter = HTTPAdapter(max_retries=retry_policy)
+        self._http_adapter = requests.Session()
+        self._http_adapter.mount("https://", adapter)
+        self._http_adapter.mount("http://", adapter)
+
+        # test connection
+        self._test_connection()
+
+    def get_provider_list(self) -> list[dict]:
         """Return list of Providers.
 
         Returns:
             list[dict]: Returns a list of existing Providers as dictionaries
         """
-        providers = self.__perform_get("/api/v1/providers/custom")
-        return providers['values']
+
+        return self.api_get("/api/v1/providers/custom", params={"page_size": self.DEFAULT_PAGE_SIZE})
 
     def get_provider(self, name: str) -> dict:
         """Get Provider by name.
@@ -124,13 +166,20 @@ class OAAClient():
         Returns:
             dict: dictionary representing Provider or None
         """
-        providers = self.get_provider_list()
-        provider = None
-        for p in providers:
-            if p["name"].lower() == name.lower():
-                provider = p
-                break
+        filter = {"filter": f"name eq \"{name}\""}
+        response = self.api_get(f"/api/v1/providers/custom", params=filter)
 
+        # expect a list of one or empty
+        if not response:
+            # no provider with that name found
+            provider = None
+        elif len(response) == 1:
+            provider = response[0]
+        else:
+            # this shouldn't happen
+            raise OAAClientError(error="Unexpected Results", message = "Unexpected results in response, returned more than one result")
+
+        # return the provider detail
         return provider
 
     def get_provider_by_id(self, provider_id: str) -> dict:
@@ -143,9 +192,10 @@ class OAAClient():
             dict: dictionary representation of Provider or None
         """
         try:
-            response = self.__perform_get("/api/v1/providers/custom/{provider_id}")
-        except OAAClientError as e:
-            if e.response.status_code == 404:
+            response = self.api_get(f"/api/v1/providers/custom/{provider_id}")
+        except OAAResponseError as e:
+            if e.status_code == 404:
+                # Provider not found, return None
                 return None
             else:
                 raise e
@@ -162,12 +212,17 @@ class OAAClient():
             custom_template (str): the OAA template to use for the Provider (e.g. "application")
             base64_icon (str, optional): Base64 encoded string of icon to set for Provider. Defaults to None.
 
+        Raises:
+            ValueError: Provider name contains invalid characters
+
         Returns:
             dict: dictionary representing the created Provider
         """
-        response = self.__perform_post("/api/v1/providers/custom", {"name": name, "custom_template": custom_template})
-        provider = response['value']
 
+        if not re.match(self.ALLOWED_CHARACTERS, name):
+            raise ValueError(f"Provider name contains invalid characters, must match {self.ALLOWED_CHARACTERS}")
+
+        provider = self.api_post("/api/v1/providers/custom", {"name": name, "custom_template": custom_template})
         if base64_icon:
             self.update_provider_icon(provider['id'], base64_icon)
 
@@ -193,7 +248,7 @@ class OAAClient():
             base64_icon = base64_icon.decode()
 
         icon_payload = {"icon_base64": base64_icon}
-        self.__perform_post(f"/api/v1/providers/custom/{provider_id}:icon", data=icon_payload)
+        self.api_post(f"/api/v1/providers/custom/{provider_id}:icon", data=icon_payload)
 
         return None
 
@@ -209,11 +264,11 @@ class OAAClient():
         Returns:
             dict: response from API
         """
-        response = self.__perform_delete(f"/api/v1/providers/custom/{provider_id}")
+        response = self.api_delete(f"/api/v1/providers/custom/{provider_id}")
         return response
 
 
-    def get_data_sources(self, provider_id: str) -> List[dict]:
+    def get_data_sources(self, provider_id: str) -> list[dict]:
         """Get Data Sources for Provider by ID.
 
         Get the list of existing Data Sources, filtered by Provider UUID.
@@ -223,8 +278,9 @@ class OAAClient():
         Returns:
             list[dict]: List of Data Sources as dictionaries
         """
-        response = self.__perform_get(f"/api/v1/providers/custom/{provider_id}/datasources")
-        return response['values']
+
+        return self.api_get(f"/api/v1/providers/custom/{provider_id}/datasources", params={"page_size": self.DEFAULT_PAGE_SIZE})
+
 
     def get_data_source(self, name:str, provider_id:str) -> dict:
         """Get Provider's Data Source by name.
@@ -238,12 +294,19 @@ class OAAClient():
         Returns:
             dict: Data Source as dict or None
         """
-        data_sources = self.get_data_sources(provider_id)
-        data_source = None
-        for d in data_sources:
-            if d["name"].lower() == name.lower():
-                data_source = d
-                break
+
+        filter = {"filter": f"name+eq+\"{name}\""}
+        response = self.api_get(f"/api/v1/providers/custom/{provider_id}/datasources", params=filter)
+
+        # expect a list of one or empty
+        if not response:
+            # no data_source with that name found, return None
+            data_source = None
+        elif len(response) == 1:
+            data_source = response[0]
+        else:
+            # this shouldn't happen
+            raise OAAClientError(error="Unexpected Results", message = "Unexpected results in response, returned more than one result")
 
         return data_source
 
@@ -254,11 +317,18 @@ class OAAClient():
             name (str): Name for new Data Source
             provider_id (str): Unique identifier for the Provider
 
+        Raises:
+            ValueError: Data source name contains invalid characters
+
         Returns:
             dict: dictionary of new Data Source
         """
-        datasource = self.__perform_post(f"/api/v1/providers/custom/{provider_id}/datasources", {"name": name, "id": provider_id})
-        return datasource['value']
+
+        if not re.match(self.ALLOWED_CHARACTERS, name):
+            raise ValueError(f"Data source name contains invalid characters, must match {self.ALLOWED_CHARACTERS}")
+
+        data_source = {"name": name, "id": provider_id}
+        return self.api_post(f"/api/v1/providers/custom/{provider_id}/datasources", data=data_source)
 
     def create_datasource(self, name, provider_id):
         """ Legacy function for backwards compatibility
@@ -278,7 +348,7 @@ class OAAClient():
         Returns:
             dict: API response
         """
-        response = self.__perform_delete(f"/api/v1/providers/custom/{provider_id}/datasources/{data_source_id}")
+        response = self.api_delete(f"/api/v1/providers/custom/{provider_id}/datasources/{data_source_id}")
         return response
 
     def push_metadata(self, provider_name: str, data_source_name: str, metadata: dict, save_json: bool = False) -> dict:
@@ -338,11 +408,11 @@ class OAAClient():
             raise OAAClientError("OVERSIZE", message=f"Payload size exceeds maximum size of 100MB: {payload_size:,} bytes, compression enabled: {self.enable_compression}")
 
         log.debug(f"Final payload size: {payload_size:,} bytes")
-        result = self.__perform_post(f"/api/v1/providers/custom/{provider['id']}/datasources/{data_source['id']}:push", payload)
+        result = self.api_post(f"/api/v1/providers/custom/{provider['id']}/datasources/{data_source['id']}:push", payload)
 
         return result
 
-    def push_application(self, provider_name: str, data_source_name: str, application_object: Union[CustomApplication, CustomIdPProvider], save_json=False) -> dict:
+    def push_application(self, provider_name: str, data_source_name: str, application_object: CustomApplication|CustomIdPProvider, save_json=False) -> dict:
         """Push an OAA Application Object (such as CustomApplication).
 
         Extract the OAA JSON payload from the supplied OAA class (e.g. CustomApplication, CustomIdPProvider) and push to
@@ -369,11 +439,11 @@ class OAAClient():
         metadata = application_object.get_payload()
         return self.push_metadata(provider_name, data_source_name, metadata, save_json=save_json)
 
-    def api_get(self, api_path: str) -> Union[list, dict]:
+    def api_get(self, api_path: str, params: dict = None) -> list|dict:
         """Perform Veza API GET operation.
 
-        Call GET on supplied API path for the Veza instance and return the results. Results of API will either be list or
-        dictionary depending on if the API destination.
+        Makes the GET API call to the given path and processes the API response. Returns the `value` or `values` result
+        returned from the API.
 
         - For API endpoints that return a list like `/api/v1/providers/custom` function will return a list of entities or an
         empty list if the API returns no results.
@@ -384,73 +454,68 @@ class OAAClient():
             api_path (str): API path relative to Veza URL (example `/api/v1/providers`).
 
         Raises:
-            OAAClientError: If API operation does not complete successfully
+            OAAResponseError: API returned an error
+            OAAConnectionError: Connection error during HTTP operation
 
         Returns:
-            Union[list, dict]: Returns list or dict based on API destination
+            list|dict: Returns list or dict based on API destination
         """
-        return self.__perform_get(api_path)
 
-    def __perform_get(self, api_path):
-        headers = {"authorization": f"Bearer {self.api_key}"}
+        result = []
 
-        api_path = api_path.lstrip("/")
-        response = requests.get(f"{self.url}/{api_path}", headers=headers, timeout=60, verify=self.verify_ssl)
-        if response.ok:
-            return response.json()
-        else:
-            # TODO: handle non json response
-            try:
-                error = response.json()
-            except RequestsJSONDecodeError:
-                log.error("Unable to process API error response as JSON, raising generic response")
-                raise OAAClientError("ERROR", response.reason, response.status_code)
-            # process JSON response
-            message = error.get("message", "Unknown error during GET")
-            code = error.get("code", "UNKNOWN")
-            raise OAAClientError(code, message, status_code=response.status_code, details=error.get("details", []))
+        if not params:
+            params = {}
 
+        while True:
+            response = self._perform_request(method="GET", api_path=api_path, params=params)
+
+
+            if "values" in response:
+                # paginated response,
+                result.extend(response.get("values", []))
+                if response.get("has_more"):
+                    params["page_token"] = response.get("next_page_token")
+                else:
+                    # no more pages
+                    break
+            elif "value" in response:
+                # singular API response, set return value to response value
+                result = response["value"]
+                break
+            else:
+                # unexpected API response, just return the result
+                return response
+
+        return result
 
     def api_post(self, api_path: str, data: dict) -> dict:
         """Perform Veza API POST operation.
 
-        Call POST on the supplied Veza instance API path, including the data payload. The API response will be returned as
-        dictionary.
+        Call POST on the supplied Veza instance API path, including the data payload.
+
+        Returns `value` or `values` response from API result.
 
         Args:
             api_path (str): API path relative to Veza URL example `/api/v1/providers`
             data (dict): dictionary object included as JSON in body of POST operation
 
         Raises:
-            OAAClientError: If API operation does not complete successfully
+            OAAResponseError: API returned an error
+            OAAConnectionError: Connection error during HTTP operation
 
         Returns:
             dict: API response as dictionary
         """
-        return self.__perform_post(api_path, data)
 
-    def __perform_post(self, api_path, data):
-        if not isinstance(data, dict):
-            raise OAAClientError("INVALID_DATA", "data must be dictionary type for post")
+        result = self._perform_request(method="POST", api_path=api_path, data=data)
 
-        headers = {"Authorization": f"Bearer {self.api_key}"}
-
-        api_path = api_path.lstrip("/")
-        response = requests.post(f"{self.url}/{api_path}", headers=headers, json=data, timeout=300, verify=self.verify_ssl)
-        if response.ok:
-            return response.json()
+        # unwrap response and return result
+        if "values" in result:
+            return result["values"]
+        elif "value" in result:
+            return result["value"]
         else:
-            try:
-                error = response.json()
-            except RequestsJSONDecodeError as e:
-                log.error("Unable to process API error response as JSON, raising generic response")
-                raise OAAClientError("ERROR", f"{response.reason} - {response.url}", status_code=response.status_code)
-            # process JSON response
-            message = error.get("message", "Unknown error during POST")
-            code = error.get("code", "UNKNOWN")
-            raise OAAClientError(code, message, status_code=response.status_code, details=error.get("details", []))
-
-
+            return result
 
     def api_delete(self, api_path:str) -> dict:
         """Perform REST API DELETE operation.
@@ -458,29 +523,121 @@ class OAAClient():
         Args:
             api_path (str): API Path API path relative to Veza URL
 
+        Raises:
+            OAAResponseError: API returned an error
+            OAAConnectionError: Connection error during HTTP operation
+
         Returns:
             dict: API response from call
         """
-        return self.__perform_delete(api_path)
+        return self._perform_request(method="DELETE", api_path=api_path)
 
-    def __perform_delete(self, api_path: str) -> dict:
+    def _perform_request(self, method: str, api_path: str, data: dict = None, params: dict = None) -> dict:
+        """Perform HTTP request
 
-        headers = {"Authorization": f"Bearer {self.api_key}"}
+        Performs an HTTP request of the specified method to the Veza tenant
 
+        Args:
+            method (str): HTTP method, GET, POST, DELETE
+            api_path (str): API path relative to Veza host URL, e.g. `/api/v1/providers`
+            data (dict, optional): For POST operation data to send. Defaults to None.
+
+        Raises:
+            OAAClientError: For errors connecting to or returned by the Veza tenant
+
+        Returns:
+            dict: Veza API JSON response as dictionary
+        """
+
+        response = None
+        headers = {"authorization": f"Bearer {self.api_key}"}
+        api_timeout = 300
         api_path = api_path.lstrip("/")
-        response = requests.delete(f"{self.url}/{api_path}", headers=headers, timeout=60, verify=self.verify_ssl)
-        if response.ok:
-            return response.json()
+
+        # pre-process the parameters to not escape symbols `:+`
+        if params:
+            params_str = urlencode(params, safe=':+')
         else:
+            params_str = None
+
+        try:
+            response = self._http_adapter.request(method, f"{self.url}/{api_path}", headers=headers, timeout=api_timeout, params=params_str, json=data, verify=self.verify_ssl)
+            response.raise_for_status()
+            # load API response
+            result = response.json()
+        except requests.exceptions.HTTPError as e:
+            # HTTP request completed but returned an error
+            # decode expected error message parts
             try:
-                error = response.json()
-            except RequestsJSONDecodeError:
-                log.error("Unable to process API error response as JSON, raising generic response")
-                raise OAAClientError("ERROR", f"{response.reason} - {response.url}", response.status_code)
-            # process JSON response
-            message = error.get("message", "Unknown error during DELETE")
-            code = error.get("code", "UNKNOWN")
-            raise OAAClientError(code, message, status_code=response.status_code, details=error.get("details", []))
+                result = response.json()
+                message = result.get("message", f"Unknown error during {method.upper()}")
+                code = result.get("code", "UNKNOWN")
+            except requests.exceptions.JSONDecodeError:
+                # response is not a valid JSON, unexpected
+                result = {}
+                code = "ERROR"
+                if response.reason:
+                    message = f"Error reason: {response.reason}"
+                else:
+                    message = "Unknown error, response is not JSON"
+            raise OAAResponseError(code, message, status_code=e.response.status_code, details=result.get("details", []))
+        except requests.exceptions.JSONDecodeError as e:
+            # HTTP response reports success but response does not decode to JSON
+            if response:
+                status_code = response.status_code
+            else:
+                status_code = None
+            raise OAAClientError("ERROR", "Response not JSON", status_code=status_code)
+        except requests.exceptions.RequestException as e:
+            if not e.response:
+                raise OAAConnectionError("ERROR", message=str(e))
+            else:
+                raise OAAConnectionError("ERROR", message=str(e), status_code=e.response.status_code)
+
+        return result
+
+    def _test_connection(self) -> None:
+        """Test the OAAClient connection
+
+        Validates the Veza URL and API key with a test call. Raises an exception
+        when unable to connect to the Veza host.
+
+        Raises:
+            OAAResponseError: For errors returned by Veza including 401 for bad credentials
+            OAAConnectionError: When unable to connect to Veza API.
+        """
+
+
+        # do separate DNS lookup to quickly fail if the hostname isn't resolving
+        veza_url = urlsplit(self.url)
+        try:
+            x = socket.getaddrinfo(veza_url.hostname, 0)
+        except socket.gaierror as e:
+            log.debug("DNS lookup failure during connection test")
+            raise OAAConnectionError("Unknown host", message=f"Unable to lookup DNS for {veza_url.hostname}")
+
+        # test connection to validate host and credentials
+        try:
+            self.api_get("/api/v1/providers/custom/templates")
+        except OAAResponseError as e:
+            log.debug("API returned error during API connection test")
+            raise e
+        except OAAConnectionError as e:
+            log.debug("Unable to connect during API connection test")
+            raise e
+
+class OAARetry(Retry):
+    """Super class for urllib3.util.retry
+
+    Super class to allow modifying the default max backoff time from 120 seconds
+    to our own value
+
+    Args:
+        Retry (_type_): _description_
+    """
+    def __init__(self, backoff_max=30, **kwargs) -> None:
+        super(OAARetry, self).__init__(**kwargs)
+        self.DEFAULT_BACKOFF_MAX = backoff_max
 
 
 def main():

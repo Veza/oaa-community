@@ -6,20 +6,26 @@ license that can be found in the LICENSE file or at
 https://opensource.org/licenses/MIT.
 """
 
-from requests.exceptions import JSONDecodeError as RequestsJSONDecodeError
-from requests.models import Response
-from unittest.mock import MagicMock, patch
 import base64
-import json
 import logging
 import os
-import pytest
-import sys
+import time
 import uuid
+from http.client import HTTPMessage, HTTPResponse
+from unittest.mock import MagicMock, PropertyMock, patch
 
-from oaaclient.client import OAAClient, OAAClientError
+import pytest
+import requests
+from oaaclient.client import OAAClient, OAAClientError, OAAConnectionError, OAAResponseError
+from requests.models import Response
+
 from generate_app import generate_app
 from generate_idp import generate_idp
+
+# enable debug logging
+logging.basicConfig(level=logging.DEBUG)
+log = logging.getLogger()
+log.setLevel(logging.DEBUG)
 
 
 @pytest.mark.skipif(not os.getenv("PYTEST_VEZA_HOST"), reason="Test host is not configured")
@@ -45,6 +51,15 @@ def test_client_provider(veza_con):
     assert created_provider.get("custom_template") == "application"
     assert created_provider.get("state") == "ENABLED"
     assert created_provider.get("id") is not None
+
+    provider_info = veza_con.get_provider_by_id(created_provider.get("id"))
+    assert provider_info is not None
+    assert provider_info.get("id") == created_provider.get("id")
+    assert provider_info.get("name") == provider_name
+
+    # test getting non-existed
+    not_provider = veza_con.get_provider_by_id(uuid.uuid4())
+    assert not_provider is None
 
     # delete the provider
     delete_response = veza_con.delete_provider(created_provider["id"])
@@ -99,7 +114,6 @@ def test_client_data_source(veza_con):
     assert data_source_1_info.get("id") is not None
 
     data_source_list = veza_con.get_data_sources(provider_id)
-    print(data_source_list)
     assert len(data_source_list) == 2
 
     # test delete
@@ -123,18 +137,18 @@ def test_client_data_source(veza_con):
 @pytest.mark.parametrize("url",["https://noreply.vezacloud.com", "noreply.vezacloud.com", "noreply.vezacloud.com/", "https://noreply.vezacloud.com/"])
 def test_url_formatter(url):
     test_api_key = "1234"
-    with patch.object(OAAClient, "get_provider_list", return_value=[]):
+    with patch.object(OAAClient, "_test_connection", return_value=None):
         veza_con = OAAClient(url=url, token=test_api_key)
 
         assert veza_con.url == "https://noreply.vezacloud.com"
 
-@patch('oaaclient.client.requests')
-def test_api_get_error(mock_requests):
+@patch.object(requests.Session, "request")
+def test_api_get_error(mock_session_get):
     # Test that the correct OAAClient exception is raised on properly populated
 
     test_api_key = "1234"
-    # patch get_provider_list to instantiate a connection object
-    with patch.object(OAAClient, "get_provider_list", return_value=[]):
+    # patch _test_connection to instantiate a connection object
+    with patch.object(OAAClient, "_test_connection", return_value=None):
         veza_con = OAAClient(url="https://noreply.vezacloud.com", token=test_api_key)
 
 
@@ -158,26 +172,126 @@ def test_api_get_error(mock_requests):
                     }
                     """
     mock_response._content = error_message
-    mock_requests.get.return_value = mock_response
+    mock_session_get.return_value = mock_response
 
     with pytest.raises(OAAClientError) as e:
-        veza_con.api_get("/api/path")
+        response = veza_con.api_get("/api/path")
 
-    # test that the error is populated propery
+    # test that the error is populated property
     assert e.value.error == "Internal"
     assert e.value.message == "Internal Server Error, please retry and if the error persists contact support at support@veza.com"
     assert e.value.status_code == 400
     assert len(e.value.details) == 1
     assert "Internal server error." in str(e.value.details)
 
-@patch('oaaclient.client.requests')
-def test_api_get_nonjson_error(mock_requests):
+@patch("urllib3.connectionpool.HTTPConnectionPool._get_conn")
+def test_api_get_retry(mock_get_conn):
+    # Test that the correct OAAClient exception is raised on properly populated
+
+    # set total retry count lower to speed up tests
+    os.environ.setdefault("OAA_API_RETRIES", "3")
+
+    test_api_key = "1234"
+    # patch _test_connection to instantiate a connection object
+    with patch.object(OAAClient, "_test_connection", return_value=None):
+        veza_con = OAAClient(url="https://noreply.vezacloud.com", token=test_api_key)
+
+    url = "/api/should/fail"
+
+    bad = MagicMock(status=500, msg=HTTPMessage(), response=Response())
+    bad.create_autospec(HTTPResponse)
+    # assert five bad raises exception
+
+
+    # the mock_get_conn is patched urllib3.connectionpool.HTTPConnectionPool._get_conn
+    # _get_conn returns a urllib3.HTTPConection
+    # ensure that the side effect is bad for the total number of retries
+    mock_get_conn.return_value.getresponse.side_effect = [bad] * (OAAClient.DEFAULT_RETRY_COUNT + 1)
+
+    timeout_start = time.time()
+
+    with pytest.raises(OAAConnectionError) as e:
+        response = veza_con.api_get(url)
+
+    retry_time = time.time() - timeout_start
+    assert retry_time > 0.5  # three retries should take at least 0.6 retries, if scaling isn't working this would be faster
+
+    # test that the error is populated property
+    assert e.value.error == "ERROR"
+    assert "Max retries exceeded" in e.value.message
+
+    # test that retry to good works
+    url = "/api/should/work"
+
+    mock_get_conn.reset_mock()
+
+    good = MagicMock(name="HttpResponse200")
+    good.status = 200
+    # in order to get urlib3 to populate the response content before returning it to requests you have to do a few things
+    # set msg contains the headers, need to tell it that there is a response coming that is a chunked response
+    good.msg = HTTPMessage()
+    good.msg.add_header('Transfer-Encoding', 'chunked')
+    good.msg.add_header('Content-Type', 'application/json')
+    # in order to get urllib3 to read the content we need to pass it a size of chunks, this is from fp.readline
+    good.fp.readline.side_effect = [b'1dc1\r\n', b'0\r\n', b'\r\n']
+    # after it works out the sizes it makes "_safe_read" calls to get the actual content, we can just pass the value we want here
+    good._safe_read.return_value = b'{"message": "ok"}'
+
+    bad.reset_mock()
+    mock_get_conn.return_value.getresponse.side_effect = [bad, bad, good]
+
+    # test that the api get will retry to get to the good response
+    response = veza_con.api_get(url)
+    log.debug(response)
+    assert response.get("message") == "ok"
+
+
+@pytest.mark.skipif(not os.getenv("PYTEST_VEZA_HOST"), reason="Test host is not configured")
+@patch("urllib3.connectionpool.HTTPConnectionPool._get_conn")
+def test_api_get_retry_timeout(mock_get_conn):
+    # Test to ensure full retry timeout exceeds 60 second target
+
+    # ensure that the default isn't being overridden
+    del os.environ["OAA_API_RETRIES"]
+
+    test_api_key = "1234"
+    # patch _test_connection to instantiate a connection object
+    with patch.object(OAAClient, "_test_connection", return_value=None):
+        veza_con = OAAClient(url="https://noreply.vezacloud.com", token=test_api_key)
+
+    url = "/api/should/fail"
+
+    bad = MagicMock(status=500, msg=HTTPMessage(), response=Response())
+    bad.create_autospec(HTTPResponse)
+
+    # the mock_get_conn is patched urllib3.connectionpool.HTTPConnectionPool._get_conn
+    # _get_conn returns a urllib3.HTTPConection
+    # ensure that the side effect is bad for the total number of retries
+    mock_get_conn.return_value.getresponse.side_effect = [bad] * (OAAClient.DEFAULT_RETRY_COUNT + 1)
+
+    timeout_start = time.time()
+
+    with pytest.raises(OAAConnectionError) as e:
+        response = veza_con.api_get(url)
+
+    retry_time = time.time() - timeout_start
+    assert 150 < retry_time < 200
+
+    # test that the error is populated property
+    assert e.value.error == "ERROR"
+    assert "Max retries exceeded" in e.value.message
+
+    return
+
+
+@patch.object(requests.Session, "request")
+def test_api_get_nonjson_error(mock_session_get):
     # Test that the OAAClient correctly handles a non-JSON respponse if error isn't coming from Veza stack
 
     test_api_key = "1234"
     url = "https://noreply.vezacloud.com"
-    # patch get_provider_list to instantiate a connection object
-    with patch.object(OAAClient, "get_provider_list", return_value=[]):
+    # patch _test_connection to instantiate a connection object
+    with patch.object(OAAClient, "_test_connection", return_value=None):
         veza_con = OAAClient(url=url, token=test_api_key)
 
     # Mock a response with non-JSON data, will force a JSONDecodeError
@@ -187,7 +301,7 @@ def test_api_get_nonjson_error(mock_requests):
     mock_response.reason = "Error Reason"
     mock_response.url = url
 
-    mock_requests.get.return_value = mock_response
+    mock_session_get.return_value = mock_response
 
     with pytest.raises(OAAClientError) as e:
         veza_con.api_get("/api/path")
@@ -197,14 +311,39 @@ def test_api_get_nonjson_error(mock_requests):
     assert "Error Reason" in e.value.message
     assert e.value.status_code == 500
 
+@patch.object(requests.Session, "request")
+def test_api_get_nonjson_success(mock_session_get):
+    # Test that the OAAClient raises the correct error if somehow it gets a successful HTTP response that is not JSON
 
-@patch('oaaclient.client.requests')
-def test_api_post_error(mock_requests):
+    test_api_key = "1234"
+    url = "https://noreply.vezacloud.com"
+    # patch _test_connection to instantiate a connection object
+    with patch.object(OAAClient, "_test_connection", return_value=None):
+        veza_con = OAAClient(url=url, token=test_api_key)
+
+    # Mock a response with non-JSON data, will force a JSONDecodeError
+    mock_response = Response()
+    mock_response.status_code = 200
+    mock_response._content = b"This is not json"
+    mock_response.url = url
+
+    mock_session_get.return_value = mock_response
+
+    with pytest.raises(OAAClientError) as e:
+        veza_con.api_get("/api/path")
+
+    # should receive the generic error message
+    assert e.value.error == "ERROR"
+    assert e.value.message == "Response not JSON"
+    assert e.value.status_code == 200
+
+@patch.object(requests.Session, "request")
+def test_api_post_error(mock_session_post):
     # Test that the correct OAAClient exception is raised on properly populated
 
     test_api_key = "1234"
-    # patch get_provider_list to instantiate a connection object
-    with patch.object(OAAClient, "get_provider_list", return_value=[]):
+    # patch _test_connection to instantiate a connection object
+    with patch.object(OAAClient, "_test_connection", return_value=None):
         veza_con = OAAClient(url="https://noreply.vezacloud.com", token=test_api_key)
 
 
@@ -238,7 +377,7 @@ def test_api_post_error(mock_requests):
             """
     mock_response._content = error_message
 
-    mock_requests.post.return_value = mock_response
+    mock_session_post.return_value = mock_response
 
     with pytest.raises(OAAClientError) as e:
         veza_con.api_post("/api/path", data={})
@@ -250,14 +389,14 @@ def test_api_post_error(mock_requests):
     assert e.value.details != []
     assert "Provider with the same name already exists" in str(e.value.details)
 
-@patch('oaaclient.client.requests')
-def test_api_post_nonjson_error(mock_requests):
+@patch.object(requests.Session, "request")
+def test_api_post_nonjson_error(mock_session_post):
     # Test that the OAAClient correctly handles a non-JSON respponse if error isn't coming from Veza stack
 
     test_api_key = "1234"
     url = "https://noreply.vezacloud.com"
-    # patch get_provider_list to instantiate a connection object
-    with patch.object(OAAClient, "get_provider_list", return_value=[]):
+    # patch _test_connection to instantiate a connection object
+    with patch.object(OAAClient, "_test_connection", return_value=None):
         veza_con = OAAClient(url=url, token=test_api_key)
 
     # Mock a response with non-JSON data, will force a JSONDecodeError
@@ -267,7 +406,7 @@ def test_api_post_nonjson_error(mock_requests):
     mock_response.reason = "Error Reason"
     mock_response.url = url
 
-    mock_requests.post.return_value = mock_response
+    mock_session_post.return_value = mock_response
 
     with pytest.raises(OAAClientError) as e:
         veza_con.api_post("/api/path", data={})
@@ -277,13 +416,13 @@ def test_api_post_nonjson_error(mock_requests):
     assert "Error Reason" in e.value.message
     assert e.value.status_code == 500
 
-@patch('oaaclient.client.requests')
-def test_api_delete_error(mock_requests):
+@patch.object(requests.Session, "request")
+def test_api_delete_error(mock_session_delete):
     # Test that the correct OAAClient exception is raised on properly populated
 
     test_api_key = "1234"
-    # patch get_provider_list to instantiate a connection object
-    with patch.object(OAAClient, "get_provider_list", return_value=[]):
+    # patch _test_connection to instantiate a connection object
+    with patch.object(OAAClient, "_test_connection", return_value=None):
         veza_con = OAAClient(url="https://noreply.vezacloud.com", token=test_api_key)
 
 
@@ -312,7 +451,7 @@ def test_api_delete_error(mock_requests):
             }
             """
     mock_response._content = error_message
-    mock_requests.delete.return_value = mock_response
+    mock_session_delete.return_value = mock_response
 
     with pytest.raises(OAAClientError) as e:
         veza_con.api_delete("/api/path")
@@ -324,14 +463,14 @@ def test_api_delete_error(mock_requests):
     assert e.value.details != []
     assert "Requested resource was not found." in str(e.value.details)
 
-@patch('oaaclient.client.requests')
-def test_api_post_delete_error(mock_requests):
-    # Test that the OAAClient correctly handles a non-JSON respponse if error isn't coming from Veza stack
+@patch.object(requests.Session, "request")
+def test_api_post_delete_error(mock_session_delete):
+    # Test that the OAAClient correctly handles a non-JSON response if error isn't coming from Veza stack
 
     test_api_key = "1234"
     url = "https://noreply.vezacloud.com"
-    # patch get_provider_list to instantiate a connection object
-    with patch.object(OAAClient, "get_provider_list", return_value=[]):
+    # patch _test_connection to instantiate a connection object
+    with patch.object(OAAClient, "_test_connection", return_value=None):
         veza_con = OAAClient(url=url, token=test_api_key)
 
     # Mock a response with non-JSON data, will force a JSONDecodeError
@@ -341,12 +480,12 @@ def test_api_post_delete_error(mock_requests):
     mock_response.reason = "Error Reason"
     mock_response.url = url
 
-    mock_requests.delete.return_value = mock_response
+    mock_session_delete.return_value = mock_response
 
     with pytest.raises(OAAClientError) as e:
         veza_con.api_delete("/api/path")
 
-    # should recieve the generic error message
+    # should receive the generic error message
     assert e.value.error == "ERROR"
     assert "Error Reason" in e.value.message
     assert e.value.status_code == 500
@@ -372,7 +511,8 @@ def test_large_payload(mock_requests, mock_get_provider, mock_get_data_source):
     mock_requests.get.return_value = mock_response
     mock_requests.post.return_value = mock_response
 
-    veza_con = OAAClient(url=url, api_key=test_api_key)
+    with patch.object(OAAClient, "_test_connection", return_value=None):
+        veza_con = OAAClient(url=url, token=test_api_key)
 
     # disable compression to make it easier to create a large payload
     veza_con.enable_compression = False
@@ -406,12 +546,14 @@ def test_compression(mock_requests, mock_get_provider, mock_get_data_source):
     mock_requests.get.return_value = mock_response
     mock_requests.post.return_value = mock_response
 
-    veza_con = OAAClient(url=url, api_key=test_api_key)
+    with patch.object(OAAClient, "_test_connection", return_value=None):
+        veza_con = OAAClient(url=url, token=test_api_key)
+
     veza_con.enable_compression = True
 
     app = generate_app()
 
-    with patch.object(veza_con, "_OAAClient__perform_post") as post_mock:
+    with patch.object(veza_con, "api_post") as post_mock:
         veza_con.push_application("provider_name", "data_source_name", application_object=app, save_json=False)
 
     assert post_mock.called
@@ -425,3 +567,133 @@ def test_compression(mock_requests, mock_get_provider, mock_get_data_source):
     assert base64.b64decode(payload['json_data'])
 
 
+def test_request_exceptions():
+    assert True
+    return
+
+def test_exception_hierarchy():
+    """Test exception hierarchy
+
+    Ensure that detailed exceptions are captured by the OAAClientError base exception
+    """
+
+    with pytest.raises(OAAClientError) as e:
+        raise OAAResponseError("test error", message="test")
+
+    assert e is not None
+    assert isinstance(e.value, OAAClientError)
+    assert isinstance(e.value, OAAResponseError)
+
+    with pytest.raises(OAAClientError) as e:
+        raise OAAConnectionError("connection error", message="test")
+
+    assert e is not None
+    assert isinstance(e.value, OAAClientError)
+    assert isinstance(e.value, OAAConnectionError)
+
+
+def test_connection_test():
+    """Ensure that connection test fails fast with a bad URL
+
+    Test should successfully fail faster than the timeout
+    """
+
+    with pytest.raises(OAAConnectionError) as e:
+        con = OAAClient(url="https://host.invalid.com", api_key="test123=")
+
+    assert isinstance(e.value, OAAConnectionError)
+    # ensure that the connection test failed because of the DNS error
+    assert e.value.error == "Unknown host"
+
+@pytest.mark.skipif(not os.getenv("PYTEST_VEZA_HOST"), reason="Test host is not configured")
+@pytest.mark.timeout(10)
+def test_bad_api_key():
+    """Ensure test fails with invalid API key
+
+    Test should successfully fail faster than timeout
+    """
+
+    test_deployment = os.getenv("PYTEST_VEZA_HOST", "")
+    test_api_key = os.getenv("VEZA_API_KEY", "")
+
+    decoded = base64.b64decode(test_api_key)
+    mangled = str(decoded[:4]) + "XXXX"
+    test_api_key = base64.b64encode(decoded)
+    # test_api_key = test_api_key.replace(test_api_key[:4], "XXXX")
+
+    log.debug(f"Test bad API key value: {test_api_key=}")
+    with pytest.raises(OAAClientError) as e:
+        con = OAAClient(url=test_deployment, api_key=test_api_key)
+
+    assert isinstance(e.value, OAAClientError)
+    assert e.value.status_code == 401
+
+
+@patch.object(requests.Session, "request")
+def test_api_paging(mock_request):
+
+    test_api_key = "1234"
+    url = "https://noreply.vezacloud.com"
+
+    with patch.object(OAAClient, "_test_connection", return_value=None):
+        veza_con = OAAClient(url=url, token=test_api_key)
+
+    # build some fake pages
+    page_1 = b"""{"values": ["1", "2", "3"], "has_more": true, "next_page_token": "page2"}"""
+    page_2 = b"""{"values": ["4", "5", "6"], "has_more": true, "next_page_token": "page3"}"""
+    page_3 = b"""{"values": ["7", "8"], "has_more": false}"""
+
+    responses = []
+
+    for page in [page_1, page_2, page_3]:
+        mock_response = Response()
+        mock_response.status_code = 200
+        mock_response._content = page
+        mock_response.url = url
+
+        responses.append(mock_response)
+
+    mock_request.side_effect = responses
+
+    providers = veza_con.get_provider_list()
+
+    assert providers == ["1", "2", "3", "4", "5", "6", "7", "8"]
+
+    # assert that it made three request calls to get through all the pages
+    assert mock_request.call_count == 3
+
+    # check that the page_token parame is set correctly on each of the three expected API calls
+    call_1 = mock_request.call_args_list[0]
+    assert "page_size" in call_1.kwargs.get("params")
+
+    call_2 = mock_request.call_args_list[1]
+    assert "page_token=page2" in call_2.kwargs.get("params")
+    assert "page_size" in call_2.kwargs.get("params")
+
+    call_3 = mock_request.call_args_list[0]
+    assert "page_size" in call_3.kwargs.get("params")
+
+def test_allowed_characters():
+
+    test_api_key = "1234"
+    url = "https://noreply.vezacloud.com"
+
+    with patch.object(OAAClient, "_test_connection", return_value=None):
+        veza_con = OAAClient(url=url, token=test_api_key)
+
+    with pytest.raises(ValueError) as e:
+        veza_con.create_provider("invalid/characters", "application")
+
+    assert e.value is not None
+    assert "Provider name contains invalid characters" in str(e.value)
+
+    with pytest.raises(ValueError) as e:
+        veza_con.create_data_source("invalid/characters", provider_id="1234")
+
+    assert e.value is not None
+    assert "Data source name contains invalid characters" in str(e.value)
+
+    with patch.object(OAAClient, "api_post", return_value={}):
+        provider = veza_con.create_provider("allowed 1234 @#$%&*:()!,_'\" =.-", "application")
+
+    assert provider == {}

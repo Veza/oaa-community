@@ -45,8 +45,14 @@ def test_payload_push(veza_con, app_provider):
     assert "warnings" in response
     # since our payload includes fake identities expect warnings about not matching identities
     assert response["warnings"] is not None
+    assert len(response["warnings"]) == 5
     for warning in response["warnings"]:
-        assert warning['message'].startswith("Cannot find identity by names")
+        if "Role is missing permission" in warning.get("message", ""):
+            pass
+        elif "Cannot find identity by names" in warning.get("message", ""):
+            pass
+        else:
+            assert False, "Got unexpected warning from response"
 
     data_source = veza_con.get_data_source(data_source_name, provider_id=app_provider["id"])
     while True:
@@ -82,8 +88,14 @@ def test_payload_push_compressed(veza_con, app_provider):
     assert "warnings" in response
     # since our payload includes fake identities expect warnings about not matching identities
     assert response["warnings"] is not None
+    assert len(response["warnings"]) == 5
     for warning in response["warnings"]:
-        assert warning['message'].startswith("Cannot find identity by names")
+        if "Role is missing permission" in warning.get("message", ""):
+            pass
+        elif "Cannot find identity by names" in warning.get("message", ""):
+            pass
+        else:
+            assert False, "Got unexpected warning from response"
 
     data_source = veza_con.get_data_source(data_source_name, provider_id=app_provider["id"])
     while True:

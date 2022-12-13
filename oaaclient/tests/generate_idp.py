@@ -58,11 +58,11 @@ def generate_idp():
     idp.add_group("group003", "Group 003", "g003")
     idp.add_group("group004", "Group 004", "g004")
 
-    idp.users["user0001"].add_groups(["g001"])
-    idp.users["user0002"].add_groups(["g001", "g002"])
-    idp.users["user0003"].add_groups(["g002", "g003"])
-    idp.users["user0004"].add_groups(["g002"])
-    idp.users["user0005"].add_groups(["g003"])
+    idp.users["0001"].add_groups(["g001"])
+    idp.users["0002"].add_groups(["g001", "g002"])
+    idp.users["0003"].add_groups(["g002", "g003"])
+    idp.users["0004"].add_groups(["g002"])
+    idp.users["0005"].add_groups(["g003"])
 
     return idp
 

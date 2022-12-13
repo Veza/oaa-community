@@ -1,5 +1,21 @@
 # OAA Client Change Log
 
+## 2022/12/13
+* Custom Application no longer raises an exception when creating a role with no permissions.
+
+## 2022/12/06
+* Automatic API retries for connection errors
+* New exceptions OAAResponseError, OAAConnectionError that extend the base exception OAAClientError
+  * OAAResponseError raised for API calls that result in an error being returned from Veza
+  * OAAConnectionError raised for API calls that can't complete (for network and other connection errors)
+* Use new paging and filtering in Veza APIs to improve performance
+  * `api_get` automatically processes paginated responses to get all entities. Will return a list of entities or a single value based on API response
+  * `api_post` will automatically unwrap API response and result `result` or `results` value from API response.
+* Provider and Data Source names are now checked for invalid characters in create functions before API call.
+
+## 2022/11/07
+* `CustomIdPProvider.users` and `CustomerIdPProvider.groups` dictionaries are now keyed by user/group identity (if provided) to prevent duplicate name collisions. To reference a user or group from the map after creation, use the "identity" value. If an identity is not provided, "name" is used for both identity and key.
+
 ## 2022/10/26
 * Improvements for group `unique_id` handling of non-string values.
 * Check for user or group not already a member before adding to group
@@ -17,7 +33,7 @@
 
 ## 2022/09/28
 
-* Update to LocalRole payload logic to remove duplicate permissions 
+* Update to LocalRole payload logic to remove duplicate permissions
 
 ## 2022/09/20
 

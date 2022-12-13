@@ -1060,8 +1060,7 @@ class LocalRole():
         """
         if not isinstance(permissions, list):
             raise OAATemplateException("permissions must be list")
-        if not permissions:
-            raise OAATemplateException("permissions list cannot be empty")
+
         if not all(isinstance(r, str) for r in permissions):
             raise OAATemplateException("permissions must be names of permissions as strings")
 
@@ -1455,12 +1454,17 @@ class CustomIdPProvider():
 
         """
 
-        if name in self.users:
-            raise OAATemplateException(f"IdP user {name} already defined")
+        if identity:
+            identifier = identity
+        else:
+            identifier = name
 
-        self.users[name] = CustomIdPUser(name, email, full_name, identity, property_definitions=self.property_definitions)
+        if identifier in self.users:
+            raise OAATemplateException(f"IdP user identified by {identifier} already defined")
 
-        return self.users[name]
+        self.users[identifier] = CustomIdPUser(name, email, full_name, identity, property_definitions=self.property_definitions)
+
+        return self.users[identifier]
 
     def add_group(self, name: str, full_name: str = None, identity: str = None) -> CustomIdPGroup:
         """ Add group to IdP.
@@ -1472,11 +1476,16 @@ class CustomIdPProvider():
 
         """
 
-        if name in self.groups:
-            raise OAATemplateException(f"IdP group {name} already defined")
-        self.groups[name] = CustomIdPGroup(name=name, full_name=full_name, identity=identity, property_definitions=self.property_definitions)
+        if identity:
+            identifier = identity
+        else:
+            identifier = name
 
-        return self.groups[name]
+        if identifier in self.groups:
+            raise OAATemplateException(f"IdP group {identifier} already defined")
+        self.groups[identifier] = CustomIdPGroup(name=name, full_name=full_name, identity=identity, property_definitions=self.property_definitions)
+
+        return self.groups[identifier]
 
 
 class CustomIdPDomain():

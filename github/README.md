@@ -169,7 +169,7 @@ Run using Base64-encoded key as variable:
 | n/a            | `VEZA_API_KEY`       | Veza API key                                                                        |
 | `--user-map`   | `GITHUB_USER_MAP`    | Optional path to CSV file for GitHub user name to identity mapping                  |
 | `--save-json`  | n/a                  | Save OAA JSON payload to file                                                       |
-| n/a            | `OAA_DEBUG`          | Optional flag to enable verbose debug logging                                       |
+| `--debug`      | `OAA_DEBUG`          | Optional flag to enable verbose debug logging                                       |
 
 ## Notes
 

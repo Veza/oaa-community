@@ -7,12 +7,12 @@ license that can be found in the LICENSE file or at
 https://opensource.org/licenses/MIT.
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from oaaclient.client import OAAClient, OAAClientError
 from oaaclient.templates import CustomApplication, CustomPermission, OAAPermission, OAAPropertyType, CustomResource
 from oaaclient.utils import log_arg_error
 from requests import HTTPError
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlsplit
 import argparse
 import base64
 import boto3
@@ -73,13 +73,13 @@ class GitHubGraphError(Exception):
 
 
 def gh_api_get(path, auth_token, github_url="https://api.github.com"):
-    """ Github API GET
+    """ GitHub API GET
 
     Parameters:
     path (string): API path relative to github_url
     auth_token (string): Bearer token value
     pagination (bool): Expect result to be paginated, set True when endpoint accepts per_page & page parameters
-    github_url (str): Optional path for Github endpoint, defaults to "https://api.github.com"
+    github_url (str): Optional path for GitHub endpoint, defaults to "https://api.github.com"
 
     Returns:
     dictionary: API Response
@@ -140,13 +140,13 @@ def gh_api_get(path, auth_token, github_url="https://api.github.com"):
 
 
 def gh_api_post(path, auth_token, data=None, github_url="https://api.github.com"):
-    """ Github API POST
+    """ GitHub API POST
 
     Parameters:
     path (string): API path relative to github_url
     auth_token (string): Bearer token value
     data (dictionary): Data to include in body of POST
-    github_url (str): Optional path for Github endpoing, defaults to "https://api.github.com"
+    github_url (str): Optional path for GitHub endpoint, defaults to "https://api.github.com"
 
     Returns:
     dictionary: API Response
@@ -172,7 +172,7 @@ def gh_get_org_auth(app_id, org, key_file=None, base64_key=None, github_url="htt
     key_file: {string} path to PEM key file for GitHub App
     base64_key: {string} base64 encoding of key for GitHub App
     org: {string} org name (slug) to return authentication for
-    github_url (str): Optional path for GitHub endpoing, defaults to "https://api.github.com"
+    github_url (str): Optional path for GitHub endpoint, defaults to "https://api.github.com"
 
     returns: {string} authentication token
     """
@@ -189,17 +189,19 @@ def gh_get_org_auth(app_id, org, key_file=None, base64_key=None, github_url="htt
     elif base64_key:
         app_key = base64.b64decode(base64_key)
     else:
-        raise Exception("key_file cannot be none")
+        raise Exception("key_file or base64_key required")
 
-    # build Github jwt authentication payload, valid from 10 seconds ago to 10 minutes from now
+    # build GitHub jwt authentication payload, valid from 10 seconds ago to 10 minutes from now
     jwt_payload = {"iat": int(time.time() - 10), "exp": int(time.time() + 600), "iss": app_id}
 
     encoded_jwt = jwt.encode(jwt_payload, app_key, algorithm="RS256")
     installations = gh_api_get("/app/installations", encoded_jwt, github_url=github_url)
 
     org_id = None
+
+    log.debug(f"App Installations:\n {installations}")
     for i in installations:
-        if i['account']['login'] == org:
+        if i['account']['login'].lower() == org.lower():
             org_id = i['id']
             break
 
@@ -208,7 +210,6 @@ def gh_get_org_auth(app_id, org, key_file=None, base64_key=None, github_url="htt
 
     log.debug(f"retrieving GitHub access token for {org}({org_id})")
     auth_response = gh_api_post(f"/app/installations/{org_id}/access_tokens", auth_token=encoded_jwt, data=None, github_url=github_url)
-
     if 'token' in auth_response:
         return auth_response['token']
     else:
@@ -221,7 +222,7 @@ def gh_graph_run(query: str, auth_token: str, variables: dict = None, graph_url:
     Args:
         query (str): String of GraphQL query to run
         auth_token (str): GitHub bearer auth token
-        variabls (dict, optional): Variables for submission with query
+        variables (dict, optional): Variables for submission with query
         graph_url (str, optional): GraphQL API endpoint. Defaults to "https://api.github.com/graphql".
 
     Raises:
@@ -257,12 +258,46 @@ class OAAGitHub():
     ORG_MEMBERS_ROLE_NAME = "Org Member"
     ORG_OWNERS_ROLE_NAME = "Org Owner"
 
-    def __init__(self, org_name, access_token, github_url="https://api.github.com"):
+    def __init__(self, org_name, access_token = None, github_url="https://api.github.com", gh_app_id=None, gh_app_key=None):
         self.app = CustomApplication(f"Github - {org_name}", "Github")
         self.org_name = org_name
-        self.access_token = access_token
+
+        # ensure github_url is a formatted URL
+        github_url = github_url.strip("/")
+        if re.match(r"^https:\/\/", github_url):
+            github_url = github_url
+        else:
+            github_url = f"https://{github_url}"
+
+        # set API endpoints
+        if github_url == "https://api.github.com":
+            self.github_url = github_url
+            self.github_graphql_url = f"{github_url}/graphql"
+        else:
+            self.github_url = f"{github_url}/api/v3"
+            self.github_graphql_url = f"{github_url}/api/graphql"
+
+        # setup auth token
+        self.refresh_time = None
+        self._gh_app_id = None
+        self._gh_app_key = None
+        if access_token:
+            # class is passed in access_token, no need to setup refresh
+            self.access_token = access_token
+        else:
+            # managing our own access, token, ensure required credentials are available
+            if not gh_app_id:
+                raise ValueError("app_id cannot be None with calling without access_token")
+            if not gh_app_key:
+                raise ValueError("app_key cannot be None when calling without access_token")
+
+            self._gh_app_id = gh_app_id
+            self._gh_app_key = gh_app_key
+            # pull first token
+            self._refresh_token()
+
+        # setup permissions
         self.org_default_repo_permission = None
-        self.github_url = github_url
 
         self.__define_github_permissions()
         self.__define_github_roles()
@@ -280,14 +315,19 @@ class OAAGitHub():
         self.app.property_definitions.define_resource_property("repository", "is_fork", OAAPropertyType.BOOLEAN)
 
 
+        # to disable pulling branch protection status (speed up discover) set to True
+        self.skip_branch_protection_discovery = False
+
+        return
+
     def discover_org(self):
         """ Discover all the user and team information for an organization including the default repo permissions """
         log.info(f"Starting org discovery {self.org_name}")
-        org_info = gh_api_get(f"orgs/{self.org_name}", self.access_token, github_url=self.github_url)
+        org_info = self._gh_api_get(f"orgs/{self.org_name}")
 
         if not org_info.get("default_repository_permission"):
             # default_repository_permission should be included in all responses but will be `null` if the calling user does not have sufficient permissions
-            raise Exception(f"{self.org_name} - Unable to determine default repository permission, ensure Github App has Organization Administration read-only permission")
+            raise Exception(f"{self.org_name} - Unable to determine default repository permission, ensure GitHub App has Organization Administration read-only permission")
 
         # github API returns the literal string "none" when organization has no default permission, convert to None
         log.info(f"{self.org_name} default org permission {org_info['default_repository_permission']}")
@@ -304,8 +344,8 @@ class OAAGitHub():
         return
 
     def discover_org_members(self):
-        """ Discovery the list of organization members and their organization role. Uses the GitHub GraphQL API """
-        log.debug(f"Discovering org users and roles for {self.org_name}")
+        """ Discover the list of organization members and their organization role. Uses the GitHub GraphQL API """
+        log.info(f"Discovering org users and roles for {self.org_name}")
         query = """query($org_name:String!, $first:Int!, $after:String){
                     organization(login: $org_name) {
                         membersWithRole(first: $first,  after: $after) {
@@ -336,7 +376,7 @@ class OAAGitHub():
         total_users = 0
         users_with_identity = 0
         while True:
-            result = gh_graph_run(query,auth_token=self.access_token, variables=variables, graph_url=f"{self.github_url}/graphql")
+            result = self._gh_graph_run(query, variables=variables)
             for e in result["data"]["organization"]["membersWithRole"]["edges"]:
                 total_users += 1
                 login = e["node"]["login"]
@@ -369,9 +409,9 @@ class OAAGitHub():
         return
 
     def discover_org_teams(self):
-        """Discovery the Organization teams and populate members"""
+        """Discover the Organization teams and populate members"""
 
-        log.debug(f"Discovering org teams and team members for {self.org_name}")
+        log.info(f"Discovering org teams and team members for {self.org_name}")
 
         # query one team at a time `teams(first: 1...` for it's members and child teams, create the OAA group for each team as its discovered
         # increments through all teams in GitHub's order
@@ -421,7 +461,7 @@ class OAAGitHub():
         team_after = None
         while True:
             variables["team_after"] = team_after
-            result = gh_graph_run(query,auth_token=self.access_token, variables=variables,  graph_url=f"{self.github_url}/graphql")
+            result = self._gh_graph_run(query, variables=variables)
             team = result["data"]["organization"]["teams"]["edges"][0]["node"]
             team_name = team["name"]
             team_slug = team["slug"]
@@ -460,7 +500,7 @@ class OAAGitHub():
 
                 if node["members"]["pageInfo"]["hasNextPage"] or node["childTeams"]["pageInfo"]["hasNextPage"]:
                     # more users or child teams to discover, re-run the query with updated cursors
-                    result = gh_graph_run(query,auth_token=self.access_token, variables=variables, graph_url=f"{self.github_url}/graphql")
+                    result = self._gh_graph_run(query, variables=variables)
                 else:
                     # no more team members or child groups to discover
                     break
@@ -476,7 +516,7 @@ class OAAGitHub():
 
     def discover_all_repos(self):
         """ get all the repositories for this org and call discover_repo for each """
-        repos = gh_api_get(f"/orgs/{self.org_name}/repos", self.access_token, github_url=self.github_url)
+        repos = self._gh_api_get(f"/orgs/{self.org_name}/repos")
         for repo in repos:
             self.discover_repo(repo)
 
@@ -494,7 +534,7 @@ class OAAGitHub():
 
         # get the full name of the repository (oprg/repo) to make getting the repo details easier
         full_name = repo['full_name']
-        log.info(f"Processing repository {full_name}")
+        log.debug(f"Processing repository {full_name}")
 
         # set repository properties
         repo_resource.set_property("private", repo['private'])
@@ -508,8 +548,10 @@ class OAAGitHub():
 
         # test default branch for branch protections and set boolean result
         repo_resource.set_property("default_branch", repo['default_branch'])
-        default_branch_protected = self.__is_branch_protected(full_name, repo['default_branch'])
-        repo_resource.set_property("default_branch_protected", default_branch_protected)
+
+        if not self.skip_branch_protection_discovery:
+            default_branch_protected = self.__is_branch_protected(full_name, repo['default_branch'])
+            repo_resource.set_property("default_branch_protected", default_branch_protected)
 
         self.__get_repo_teams(full_name, repo_resource)
         self.__get_repo_collaborators(full_name, repo_resource)
@@ -529,7 +571,7 @@ class OAAGitHub():
         """
 
         # Grab team permissions
-        teams = gh_api_get(f"/repos/{full_name}/teams", self.access_token, github_url=self.github_url)
+        teams = self._gh_api_get(f"/repos/{full_name}/teams")
         for team in teams:
             team_name = team['name']
             if team_name not in self.app.local_groups:
@@ -552,7 +594,7 @@ class OAAGitHub():
         return
 
     def __get_repo_collaborators(self, full_name: str, repo_resource: CustomResource) -> None:
-        """ Get all repository collaborators (user's assigned directly to the repository) and assign the users the correct role on the repository resource
+        """ Get all repository collaborators (users assigned directly to the repository) and assign the users the correct role on the repository resource
 
         Args:
             full_name (str): full name of the repo, e.g. org/repository
@@ -561,7 +603,7 @@ class OAAGitHub():
 
         # loop through each collaborator on the reposotory and save their permission level
         # ?affiliation=direct will show users with direct permissions on repo vs inherited from team or default
-        collaborators = gh_api_get(f"/repos/{full_name}/collaborators?affiliation=direct", self.access_token, github_url=self.github_url)
+        collaborators = self._gh_api_get(f"/repos/{full_name}/collaborators?affiliation=direct")
         for c in collaborators:
             user_login = c['login']
             if user_login not in self.app.local_users:
@@ -579,8 +621,8 @@ class OAAGitHub():
         return
 
     def __determine_user_role(self, permission_list):
-        """ returns the highest permission that is True from the list of Github repo permissions
-        the Github API returns True for all levels below the assigned level, to simplify reporting
+        """ returns the highest permission that is True from the list of GitHub repo permissions
+        the GitHub API returns True for all levels below the assigned level, to simplify reporting
         only save the highest level """
 
         ordered_permissions = ["admin", "maintain", "push", "triage", "pull"]
@@ -591,7 +633,7 @@ class OAAGitHub():
         return None
 
     def __map_permission(self, permission: str) -> str:
-        """Converts API notation for roles to user facing role names
+        """ Converts API notation for roles to user-facing role names
 
         Args:
             permission (str): permission as returned from the API
@@ -612,7 +654,7 @@ class OAAGitHub():
         """ pull branch protection information and return true if any branch protections are enabled """
         protected = False
         try:
-            gh_api_get(f"repos/{repo_path}/branches/{branch_name}/protection", self.access_token, github_url=self.github_url)
+            self._gh_api_get(f"repos/{repo_path}/branches/{branch_name}/protection")
             # if API returned succesfully than there are branch protections configured
             protected = True
         except HTTPError as e:
@@ -636,7 +678,7 @@ class OAAGitHub():
         return protected
 
     def __define_github_permissions(self):
-        """ ad github expected permissions to the custom application
+        """ add github expected permissions to the custom application
         https://docs.github.com/en/organizations/managing-access-to-your-organizations-repositories/repository-permission-levels-for-an-organization
         """
         github_permissions = {
@@ -667,6 +709,79 @@ class OAAGitHub():
         self.app.add_local_role("Admin", ["Pull", "Fork", "Push", "Merge", "Manage Access"])
 
         self._defined_roles = [r.lower() for r in self.app.local_roles]
+
+    def _refresh_token(self) -> None:
+        log.info("Refreshing App token")
+        jwt_payload = {"iat": int(time.time() - 10), "exp": int(time.time() + 600), "iss": self._gh_app_id}
+
+        encoded_jwt = jwt.encode(jwt_payload, self._gh_app_key, algorithm="RS256")
+        installations = gh_api_get("/app/installations", encoded_jwt, github_url=self.github_url)
+
+        org_id = None
+
+        for i in installations:
+            if i['account']['login'] == self.org_name.lower():
+                org_id = i['id']
+                break
+
+        if not org_id:
+            raise Exception(f"Unable to find org in app installations, verify GitHub App is installed in org {self.org_name}")
+
+        log.debug(f"retrieving GitHub access token for {self.org_name}({org_id})")
+        auth_response = gh_api_post(f"/app/installations/{org_id}/access_tokens", auth_token=encoded_jwt, data=None, github_url=self.github_url)
+        if not (auth_response.get("expires_at") and auth_response.get("token")):
+            log.error("Token response did not contain expected values")
+            raise HTTPError(auth_response.text, response=auth_response)
+
+        # self.refresh_time = datetime.strptime(auth_response['expires_at'], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=datetime.timezone.utc)
+        self.refresh_time = datetime.strptime(auth_response['expires_at'], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+        self.access_token =  auth_response['token']
+
+        return
+
+    def _gh_api_get(self, path: str):
+        """Helper function to making GitHub API GET calls
+
+        Calls out to outer public `gh_api_get` function setting auth token and GitHub URL from class
+
+        Refreshes auth token if available and necessary
+
+        Args:
+            path (str): API path to call
+
+        Returns:
+            API response as dictionary or list
+        """
+        if not self.refresh_time:
+            # using an access token that doesn't have an expire time, move on
+            pass
+        elif (datetime.now().astimezone() + timedelta(minutes=5)) > self.refresh_time:
+            self._refresh_token()
+
+        return gh_api_get(path, self.access_token, self.github_url)
+
+    def _gh_graph_run(self, query: str, variables: dict = None):
+        """Helper function for making GitHub GraphQL calls
+
+        calls out to outer public `gh_graph_run` function setting auth token and GitHub URL from class
+
+        Refreshes auth token if available and necessary
+
+        Args:
+            query (str):  String of GraphQL query to run
+            variables (dict, optional): Variables for submission with query
+
+        Returns:
+            dict: GraphQL query response
+        """
+
+        if not self.refresh_time:
+            # using an access token that doesn't have an expire time, move on
+            pass
+        elif (datetime.now().astimezone() + timedelta(minutes=5)) > self.refresh_time:
+            self._refresh_token()
+
+        return gh_graph_run(query=query, variables=variables, auth_token=self.access_token, graph_url=self.github_graphql_url)
 
 
 def load_user_map(oaa_app, user_map):
@@ -718,49 +833,41 @@ def load_user_map(oaa_app, user_map):
             exit(1)
 
 
-def run(org_name, app_id, veza_url, oaa_user, veza_api_key, key_file=None, base64_key=None, user_map=None, save_json=False, github_url=None):
+def run(org_name, app_id, veza_url, oaa_user, veza_api_key, key_file=None, base64_key=None, user_map=None, save_json=False, github_url=None, debug=False):
 
-    if os.getenv("OAA_DEBUG"):
+    if debug or os.getenv("OAA_DEBUG"):
         log.setLevel(logging.DEBUG)
 
-    # Instantiate a OAA Client, do this early to validate connection before processing application
+    # Instantiate an OAA Client, do this early to validate connection before processing application
     try:
         veza_con = OAAClient(url=veza_url, api_key=veza_api_key)
     except OAAClientError as e:
-        log.error(f"Unnable to connect to Veza ({veza_url})")
+        log.error(f"Unable to connect to Veza ({veza_url})")
         log.error(e.message)
         exit(1)
 
-    # format github url or set default
-    if github_url and re.match(r"^https:\/\/.*", github_url):
-        github_url = github_url
-    elif github_url:
-        github_url = f"https://{github_url}"
-    else:
-        log.debug("Setting GitHub URL to default")
+    if not github_url:
         github_url = "https://api.github.com"
-    github_url = github_url.strip("/")
 
-    log.info(f"GitHub URL: {github_url}")
-    # use Github App API to retrieve authentication token for organization
-    try:
-        org_token = gh_get_org_auth(app_id, org_name, key_file=key_file, base64_key=base64_key, github_url=github_url)
-    except HTTPError as e:
-        log.error("Error requesting GitHub organization token, check that credentials are valid")
-        log.error(e)
-        log.error("Exiting")
-        sys.exit(1)
-
-    if org_token:
-        log.info(f"Retrieved token for organization {org_name}, starting discovery")
+    if key_file:
+        with open(key_file, "rb") as f:
+            gh_app_key = f.read()
+    elif base64_key:
+        gh_app_key = base64.b64decode(base64_key)
+    else:
+        raise ValueError("Must provide app key via key_file path or base64_key value")
 
     # instantiate an instance of the OAAGitHub class, this class represents an Org and creates an OAA app
-    oaa_app = OAAGitHub(org_name, org_token, github_url=github_url)
+    oaa_app = OAAGitHub(org_name, access_token=None, github_url=github_url, gh_app_id=app_id, gh_app_key=gh_app_key)
+
+    if os.getenv("SKIP_BRANCH_PROTECTION", False):
+        log.info("Disabling branch protection discovery")
+        oaa_app.skip_branch_protection_discovery = True
 
     try:
         oaa_app.discover_org()
     except HTTPError as e:
-        log.error(f"Error discoverying organization: GitHub API returned error: {e.response.status_code} for {e.request.url}")
+        log.error(f"Error discovering organization: GitHub API returned error: {e.response.status_code} for {e.request.url}")
         log.error(e)
         log.error("Exiting")
         sys.exit(1)
@@ -776,7 +883,7 @@ def run(org_name, app_id, veza_url, oaa_user, veza_api_key, key_file=None, base6
     try:
         oaa_app.discover_all_repos()
     except HTTPError as e:
-        log.error(f"Error discoverying repositories: GitHub API returned error: {e.response.status_code} for {e.request.url}")
+        log.error(f"Error discovering repositories: GitHub API returned error: {e.response.status_code} for {e.request.url}")
         log.error(e)
         log.error("Exiting")
         sys.exit(1)
@@ -819,13 +926,14 @@ def run(org_name, app_id, veza_url, oaa_user, veza_api_key, key_file=None, base6
 ###########################################################
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--org", required=False, default=os.getenv("GITHUB_ORG"), help="Github Org slug to parse.")
-    parser.add_argument("--app-id", type=int, required=False, default=os.getenv("GITHUB_APP_ID"), help="Github App ID")
-    parser.add_argument("--key-file", required=False, default=os.getenv("GITHUB_KEY"), help="PEM keyfile for Github App authentication")
+    parser.add_argument("--org", required=False, default=os.getenv("GITHUB_ORG"), help="GitHub Org slug to parse.")
+    parser.add_argument("--app-id", type=int, required=False, default=os.getenv("GITHUB_APP_ID"), help="GitHub App ID")
+    parser.add_argument("--key-file", required=False, default=os.getenv("GITHUB_KEY"), help="PEM keyfile for GitHub App authentication")
     parser.add_argument("--user-map", type=str, required=False, default=os.getenv("GITHUB_USER_MAP"), help="optional csv user map for GitHub user names to email identities")
     parser.add_argument("--github-url", type=str, required=False, default=os.getenv("GITHUB_URL"), help="URL for GitHub API server, defaults to https://api.github.com")
     parser.add_argument("--veza-url", required=False, default=os.getenv("VEZA_URL"), help="Hostname for Veza deployment")
     parser.add_argument("--oaa-user", required=False, default=os.getenv("OAA_USER"), help="Veza username for OAA connection")
+    parser.add_argument("--debug", action="store_true", help="Enable verbose debug logging")
     parser.add_argument("--save-json", action="store_true", help="Save OAA JSON payload to file")
     args = parser.parse_args()
 
@@ -837,6 +945,7 @@ def main():
     save_json = args.save_json
     user_map = args.user_map
     github_url = args.github_url
+    debug = args.debug
 
     # security tokens can only come from OS environment
     base64_key = os.getenv("GITHUB_KEY_BASE64")
@@ -859,7 +968,7 @@ def main():
         log.error("GitHub API not provided via --key-file or one of OS environment GITHUB_KEY or GITHUB_KEY_BASE64")
         sys.exit(1)
 
-    run(org_name, app_id, veza_url, oaa_user, veza_api_key, key_file=key_file, base64_key=base64_key, user_map=user_map, save_json=save_json, github_url=github_url)
+    run(org_name, app_id, veza_url, oaa_user, veza_api_key, key_file=key_file, base64_key=base64_key, user_map=user_map, save_json=save_json, github_url=github_url, debug=debug)
 
 
 if __name__ == '__main__':

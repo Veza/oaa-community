@@ -1,5 +1,9 @@
 # GitHub Connector Change Log
 
+## 2022/12/16
+* Improved logging output
+* Fix for org name case sensitivity
+
 ## 2022/11/28
 * GitHub authorization token refresh when necessary
 

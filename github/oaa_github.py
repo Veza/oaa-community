@@ -459,6 +459,7 @@ class OAAGitHub():
         variables = {"org_name": self.org_name, "first": 100, "team_after": None, "members_after": None, "children_after": None}
 
         team_after = None
+        total_teams = 0
         while True:
             variables["team_after"] = team_after
             result = self._gh_graph_run(query, variables=variables)
@@ -469,6 +470,7 @@ class OAAGitHub():
             log.debug(f"Creating group and discovering memberships and child teams for {team_name} in {self.org_name}")
             if team_name not in self.app.local_groups:
                 self.app.add_local_group(team_name)
+                total_teams += 1
 
             while True:
                 # add members and children teams
@@ -512,13 +514,16 @@ class OAAGitHub():
                 # no more teams
                 break
 
+        log.info(f"Discovered {total_teams} teams for organization {self.org_name}")
         return
 
     def discover_all_repos(self):
         """ get all the repositories for this org and call discover_repo for each """
+        log.info("Starting repository discovery")
         repos = self._gh_api_get(f"/orgs/{self.org_name}/repos")
         for repo in repos:
             self.discover_repo(repo)
+        log.info("Finished repository discovery")
 
     def discover_repo(self, repo):
         """ populate the OAA app with the access details for a given repo, takes in GitHub repo information dictionary"""
@@ -720,7 +725,7 @@ class OAAGitHub():
         org_id = None
 
         for i in installations:
-            if i['account']['login'] == self.org_name.lower():
+            if i['account']['login'].lower() == self.org_name.lower():
                 org_id = i['id']
                 break
 

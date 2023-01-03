@@ -38,7 +38,7 @@ various teams to pursue open standards over course of time. All OAA resources in
 the MIT license.
 
 For any feedback on Open Authorization API - for example, API enrichments, etc. - please open an issue. We encourage you
-to please join our [Slack community](https://join.slack.com/t/veza-world/shared_invite/zt-17d9quyiq-20JMp0ikZ0pVNz_e5W5j7Q)
+to please join our [Slack community](https://join.slack.com/t/veza-oaa-community/shared_invite/zt-1mk5kw2ub-ySi02BAY8kHyE9BceFhjPQ)
 to share the feedback.
 
 ## How OAA Works
@@ -103,4 +103,4 @@ connector will come through the community.
 If you are interested in contributing improvements or new connectors see our [guide](docs/CONTRIBUTING.md)
 
 ## Join Us on Slack
-Join us on Slack at [veza-oaa-community](https://join.slack.com/t/veza-world/shared_invite/zt-17d9quyiq-20JMp0ikZ0pVNz_e5W5j7Q)
+Join us on Slack at [veza-oaa-community](https://join.slack.com/t/veza-oaa-community/shared_invite/zt-1mk5kw2ub-ySi02BAY8kHyE9BceFhjPQ)

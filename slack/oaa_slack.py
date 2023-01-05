@@ -18,7 +18,7 @@ import requests
 from requests.exceptions import HTTPError
 import slack_sdk
 from oaaclient.client import OAAClient, OAAClientError
-from oaaclient.templates import CustomApplication, OAAPermission, OAAPropertyType
+from oaaclient.templates import CustomApplication, OAAPermission, OAAPropertyType, LocalUser
 
 # set up logging
 log = logging.getLogger(__name__)
@@ -66,60 +66,85 @@ class OAA_Slack_Connector():
         """Discovers Slack users
         """
 
-        users_list = self.client.users_list()
-        for user in users_list.data.get("members", []):
-            id = user.get("id")
-            name = user.get("profile", {}).get("real_name_normalized")
-            display_name = user.get("profile", {}).get("display_name_normalized")
+        next_cursor = ''
+        while True:
+            users_list_response = self.client.users_list(cursor=next_cursor)
 
-            if display_name:
-                user_name = display_name
-            elif name:
-                user_name = name
-            else:
-                # fall back on id
-                log.warning(f"Unable to determine a name for user {id}")
-                user_name = id
+            # determine if there aer more responses to retrieve
+            response_metadata = users_list_response.data.get("response_metadata", {})
+            next_cursor = response_metadata.get("next_cursor")
 
-            deleted = user.get("deleted")
-            invited_user = user.get("is_invited_user")
-            email = user.get("profile", {}).get("email")
+            for user in users_list_response.data.get("members", []):
+                self._add_user(user)
 
-            is_bot = user.get("is_bot")
-            bot_id = user.get("profile", {}).get("bot_id")
-
-            oaa_user = self.app.add_local_user(name=user_name, unique_id=id)
-            if email:
-                oaa_user.add_identity(email)
-                oaa_user.set_property("email", email)
-
-            oaa_user.set_property("slack_name", name)
-            oaa_user.set_property("has_mfa", user.get("has_2fa", False))
-            oaa_user.set_property("is_restricted", user.get("is_restricted", False))
-            oaa_user.set_property("is_ultra_restricted", user.get("is_ultra_restricted", False))
-
-            if is_bot and bot_id is not None:
-                oaa_user.set_property("bot_id", bot_id)
-                #TODO: set account type to service
-
-            if deleted or invited_user:
-                oaa_user.is_active = False
-            else:
-                oaa_user.is_active = True
-
-            if user.get("is_restricted"):
-                oaa_user.add_permission("Guest", apply_to_application=True)
-            else:
-                oaa_user.add_permission("Member", apply_to_application=True)
-
-            if user.get("is_admin"):
-                oaa_user.add_permission("Admin", apply_to_application=True)
-            if user.get("is_owner"):
-                oaa_user.add_permission("Owner", apply_to_application=True)
-            if user.get("is_primary_owner"):
-                oaa_user.add_permission("Primary Owner", apply_to_application=True)
+            # stop if there are no more users to retrieve
+            if not next_cursor:
+                break
 
         return
+
+    def _add_user(self, user: dict) -> LocalUser:
+        """Create a new Local User
+
+        Args:
+            user (dict): Slack API response for user
+
+        Returns:
+            LocalUser: New OAA Local User
+        """
+
+        id = user.get("id")
+        name = user.get("profile", {}).get("real_name_normalized")
+        display_name = user.get("profile", {}).get("display_name_normalized")
+
+        if display_name:
+            user_name = display_name
+        elif name:
+            user_name = name
+        else:
+            # fall back on id
+            log.warning(f"Unable to determine a name for user {id}")
+            user_name = id
+
+        deleted = user.get("deleted")
+        invited_user = user.get("is_invited_user")
+        email = user.get("profile", {}).get("email")
+
+        is_bot = user.get("is_bot")
+        bot_id = user.get("profile", {}).get("bot_id")
+
+        oaa_user = self.app.add_local_user(name=user_name, unique_id=id)
+        if email:
+            oaa_user.add_identity(email)
+            oaa_user.set_property("email", email)
+
+        oaa_user.set_property("slack_name", name)
+        oaa_user.set_property("has_mfa", user.get("has_2fa", False))
+        oaa_user.set_property("is_restricted", user.get("is_restricted", False))
+        oaa_user.set_property("is_ultra_restricted", user.get("is_ultra_restricted", False))
+
+        if is_bot and bot_id is not None:
+            oaa_user.set_property("bot_id", bot_id)
+            #TODO: set account type to service
+
+        if deleted or invited_user:
+            oaa_user.is_active = False
+        else:
+            oaa_user.is_active = True
+
+        if user.get("is_restricted"):
+            oaa_user.add_permission("Guest", apply_to_application=True)
+        else:
+            oaa_user.add_permission("Member", apply_to_application=True)
+
+        if user.get("is_admin"):
+            oaa_user.add_permission("Admin", apply_to_application=True)
+        if user.get("is_owner"):
+            oaa_user.add_permission("Owner", apply_to_application=True)
+        if user.get("is_primary_owner"):
+            oaa_user.add_permission("Primary Owner", apply_to_application=True)
+
+        return oaa_user
 
     def _discover_usergroups(self) -> None:
         """Discovers Slack user groups

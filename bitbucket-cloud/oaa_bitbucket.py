@@ -62,8 +62,9 @@ class OAABitbucket():
         """
 
         self._discover_workspace()
+        self._discover_workspace_groups()
         self._discover_projects()
-        self._discover_bitbucket_emals()
+        self._discover_bitbucket_emails()
         return
 
     def _discover_workspace(self) -> None:
@@ -88,6 +89,29 @@ class OAABitbucket():
                 new_user.created_at = added_on
 
             new_user.add_permission(e['permission'], apply_to_application=True)
+        return
+
+    def _discover_workspace_groups(self) -> None:
+        """Discovery Workspace Groups
+
+        Bitbucket does not include a groups/membership API as part of current v2 API, they are maintaining the
+        v1 API for the groups endpoint for an unknown amount of time.
+
+        Use the v1 API to get the list of Bitbucket groups and memberships
+        """
+
+        log.info("Starting workspace groups discovery")
+        groups = self.bitbucket_api_get(f"https://api.bitbucket.org/1.0/groups/{self.workspace}")
+        for group in groups:
+            slug = group.get("slug")
+            name = group.get("name")
+            local_group = self.app.add_local_group(name=name, unique_id=slug)
+
+            for member in group.get("members", []):
+                member_id = member.get("account_id")
+                if member_id in self.app.local_users:
+                    self.app.local_users[member_id].add_group(slug)
+
         return
 
     def _discover_projects(self) -> None:
@@ -122,7 +146,11 @@ class OAABitbucket():
             project (CustomResource): Parent project CustomResource to add repository resources too
         """
         log.info(f"Discovering repos for project {key}")
-        project_repos = self.bitbucket_api_get(f"repositories/{self.workspace}", params={"q": f"project.key=\"{key}\""})
+
+        # we can only get explicit permissions for the repo if running with admin, if we get a 403 set to false so we stop trying in future repos
+        try_explicit_permissions = True
+
+        project_repos = self.bitbucket_api_get(f"repositories/{self.workspace}", params={"q": f"project.key=\"{key}\"", "pagelen": 100})
         for r in project_repos:
             name = r['name']
             slug = r['slug']
@@ -133,19 +161,81 @@ class OAABitbucket():
             repo.set_property("slug", slug)
             repo.set_property("project_key", project_key)
 
-            repo_perms = self.bitbucket_api_get(f"workspaces/{self.workspace}/permissions/repositories/{slug}")
+
+            if try_explicit_permissions:
+                try:
+                    self._discover_project_permission_explicit(repo_slug=slug, repo_resource=repo)
+                    # if explicit discovery is successful move to next repo
+                    continue
+                except HTTPError as e:
+                    if e.response.status_code == 403:
+                        # user does not have admin permission on repository, cannot retrieve explicit perms
+                        # set to false to stop trying on future repos
+                        log.info("Unable to get explicit repository permissions, falling back to user perms")
+                        try_explicit_permissions = False
+                    else:
+                        # something else went wrong
+                        raise e
+
+            # should only get this far if _discover_project_permission_explicit failed and falling back to effective repository permissions discovery
+            repo_perms = self.bitbucket_api_get(f"workspaces/{self.workspace}/permissions/repositories/{slug}", params={"pagelen": 100})
             for perm in repo_perms:
                 permission = perm.get("permission")
                 if "user" in perm:
                     # user assignment
                     account_id = perm["user"]["account_id"]
-                    self.app.local_users[account_id].add_permission(permission, resources=[repo])
+                    if account_id in self.app.local_users:
+                        self.app.local_users[account_id].add_permission(permission, resources=[repo])
+                    else:
+                        log.error(f"Permission assigned to unknown user {perm}")
                 else:
-                    log.warning(f"Unkown repository permission assignment: {perm}")
+                    log.error(f"Unknown repository permission assignment: {perm}")
 
         return
 
-    def _discover_bitbucket_emals(self) -> None:
+    def _discover_project_permission_explicit(self, repo_slug: str, repo_resource: CustomResource) -> None:
+        """Discover explicit repository permissions
+
+        Discover the explicitly assigned repository permissions for users and groups
+
+        Args:
+            repo_slug (str): repository slug
+            repo_resource (CustomResource): Custom Resource for repo
+        """
+        repo_user_perms = self.bitbucket_api_get(f"repositories/{self.workspace}/{repo_slug}/permissions-config/users")
+        for user_perm in repo_user_perms:
+            permission = user_perm.get("permission")
+            account_id = user_perm.get("user", {}).get("account_id")
+            if permission not in self.app.custom_permissions:
+                log.error("User has repository permission that is not know, skipping")
+                log.error(user_perm)
+                continue
+
+            if account_id in self.app.local_users:
+                self.app.local_users[account_id].add_permission(permission, resources=[repo_resource])
+            else:
+                log.error("Repo permission assigned to unknown user")
+                log.error(user_perm)
+
+        repo_group_perms = self.bitbucket_api_get(f"repositories/{self.workspace}/{repo_slug}/permissions-config/groups")
+        for group_perm in repo_group_perms:
+            permission = group_perm.get("permission")
+
+            group_slug = group_perm.get("group", {}).get("slug")
+            if permission not in self.app.custom_permissions.keys():
+                log.error("User has repository permission that is not know, skipping")
+                log.error(group_perm)
+                continue
+
+            if group_slug in self.app.local_groups:
+                self.app.local_groups[group_slug].add_permission(permission, resources=[repo_resource])
+            else:
+                log.error("Repo permission assigned to unknown group")
+                log.error(group_perm)
+
+        return
+
+    def _discover_bitbucket_emails(self) -> None:
         """Discovery user emails through Atlassian API
 
         Bitbucket API does not return user emails (identities) but the Atlassian API does. If provided with Atlasssian credentials

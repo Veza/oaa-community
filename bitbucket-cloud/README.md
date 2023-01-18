@@ -4,13 +4,13 @@ Python connector for Bitbucket Cloud to collect repository permissions for the V
 
 ## Overview
 
-This connector usese the Bitbucket REST API to retrieve information on user access to repositories in in a Bitbucket
+This connector uses the Bitbucket REST API to retrieve information on user access to repositories in in a Bitbucket
 Cloud workspace. The connector will discover all member users of the workspace and all repositories (by project). Each
 users permission to the repositories will be collected.
 
 ## Veza OAA Generic Application Mappings
 
-This connector uses the OAA Application template for modeling identites to permissions.
+This connector uses the OAA Application template for modeling identities to permissions.
 
 | Bitbucket Cloud | OAA Application          | Notes                                           |
 | --------------- | ------------------------ | ----------------------------------------------- |
@@ -21,6 +21,11 @@ This connector uses the OAA Application template for modeling identites to permi
 
 ## Limitations
 
+To discover group permissions on repositories the connector requires **Admin** API access for repositories. This is
+optional and can be omitted. If the **Admin** permission is not provided the connector will fall back on discovering
+user's effective permissions which can be slower and shows all users effective permission on the repository even if
+gained through group membership.
+
 To support mapping Bitbucket users to corporate identities the connector can make use of the Atlassian API to retrieve
 email addresses. Doing so requires a separate set of credentials from the Bitbucket API credentials. Follow the
 instructions bellow to configure and provide the credentials.
@@ -29,6 +34,7 @@ instructions bellow to configure and provide the credentials.
 ### Bitbucket Credentials Setup
 1. Create an [App Password](https://support.atlassian.com/bitbucket-cloud/docs/app-passwords/) for a Bitbucket user with Admin permissions
    1. Select **Read** for the following permissions: Account , Workspace Membership, Project, Repositories
+   2. To discover a repository's permissions by group membership and users the **Admin** permission on Repository is required. If omitted the connector will fall back to user effective permissions.
 
 ### Atlassian Credentials Setup (Optional)
 1. Generate an [Atlassian API token](https://support.atlassian.com/atlassian-account/docs/manage-api-tokens-for-your-atlassian-account/) for the same account

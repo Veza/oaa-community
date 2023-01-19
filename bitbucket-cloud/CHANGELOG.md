@@ -1,4 +1,7 @@
 # Bitbucket Cloud Changelog
+## 2023/1/19
+* Updated Docker image base to `python:3.10-alpine`
+
 ## 2023/1/18
 * Removed `oaaclient` symlink and added `oaaclient` dependency to requirements file. Run `pip install -r requirements.txt` to install `oaaclient` package
 * Added `Dockerfile` for creating Docker container of connector

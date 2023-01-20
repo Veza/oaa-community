@@ -1,4 +1,7 @@
 # Bitbucket Cloud Changelog
+## 2023/1/20
+* Add support for `collaborator` workspace permission
+
 ## 2023/1/19
 * Updated Docker image base to `python:3.10-alpine`
 

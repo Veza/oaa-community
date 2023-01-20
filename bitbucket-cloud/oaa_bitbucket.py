@@ -88,6 +88,10 @@ class OAABitbucket():
                 added_on = e["added_on"]
                 new_user.created_at = added_on
 
+            if not e['permission'] in self.app.custom_permissions:
+                log.error(f"Unknown workspace permission for user: {e['permission']}")
+                continue
+
             new_user.add_permission(e['permission'], apply_to_application=True)
         return
 
@@ -326,6 +330,7 @@ class OAABitbucket():
         """
 
         self.app.add_custom_permission("owner",  permissions=[OAAPermission.DataRead, OAAPermission.DataWrite, OAAPermission.DataDelete])
+        self.app.add_custom_permission("collaborator",  permissions=[OAAPermission.DataRead, OAAPermission.DataWrite])
         self.app.add_custom_permission("member",  permissions=[OAAPermission.DataRead])
 
         self.app.add_custom_permission("admin", apply_to_sub_resources=True, permissions=[OAAPermission.DataRead, OAAPermission.DataWrite, OAAPermission.DataDelete])

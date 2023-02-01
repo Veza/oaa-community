@@ -39,33 +39,28 @@ class OAALooker():
     """
 
     def __init__(self) -> None:
-        self.app = CustomApplication("Looker", application_type="looker")
+        self.app = CustomApplication("Looker", application_type="Looker")
 
         self.__looker_token = None
         # login to the looker API with custom method first since it returns better errors
-        self.__looker_api_login()
+        self._looker_api_login()
 
         self.looker_con = looker_sdk.init40()
 
         # get the Looker instance URL without api path or schema
         self.looker_instance = urlparse(self.looker_con.api_path).netloc
 
-        # Looker API makes heavy use to ID numbers in responses, to reduce API calls, create maps of ID -> name
-        self.__group_ids = {}  # map Looker group IDs to names to save API calls
-        # self.__role_ids = {}
-
-        self.__looker_roles = {}    # store information about each role in its own object
-        self.__model_roles = {}     # track roles assigned to each model
+        self._looker_roles = {}    # store information about each role in its own object
+        self._model_roles = {}     # track roles assigned to each model
+        self._admin_role_id = None
 
         # configure custom oaa properties we are going to use
-        self.app.property_definitions.define_local_user_property("id", OAAPropertyType.NUMBER)
         self.app.property_definitions.define_local_user_property("verified_looker_employee", OAAPropertyType.BOOLEAN)
         self.app.property_definitions.define_local_user_property("presumed_looker_employee", OAAPropertyType.BOOLEAN)
-        self.app.property_definitions.define_local_group_property("id", OAAPropertyType.NUMBER)
         self.app.property_definitions.define_resource_property("model_set", "id", OAAPropertyType.NUMBER)
         self.app.property_definitions.define_resource_property("model_set", "built_in", OAAPropertyType.BOOLEAN)
         self.app.property_definitions.define_resource_property("model_set", "all_access", OAAPropertyType.BOOLEAN)
-        self.app.property_definitions.define_resource_property("connection", "dialiect", OAAPropertyType.STRING)
+        self.app.property_definitions.define_resource_property("connection", "dialect", OAAPropertyType.STRING)
         self.app.property_definitions.define_resource_property("connection", "host", OAAPropertyType.STRING)
         self.app.property_definitions.define_resource_property("connection", "username", OAAPropertyType.STRING)
 
@@ -74,19 +69,24 @@ class OAALooker():
     def discover(self) -> None:
         """ Run through Looker discovery steps and populate self.app with OAA template information """
 
+        log.info("Starting Looker discovery")
         self.discover_roles()
 
         self.discover_groups()
         self.discover_users()
 
-        # assign the admins to the app
-        for user in self.__looker_roles["Admin"].users:
-            self.app.local_users[user].add_role("Admin", apply_to_application=True)
-        for group in self.__looker_roles["Admin"].groups:
-            self.app.local_groups[group].add_role("Admin", apply_to_application=True)
+        if not self._admin_role_id:
+            log.error("Didn't discover Admin role ID, cannot assign admin users to application")
+        else:
+            # assign the admins to the app
+            for user in self._looker_roles[self._admin_role_id].users:
+                self.app.local_users[user].add_role(self._admin_role_id, apply_to_application=True)
+            for group in self._looker_roles[self._admin_role_id].groups:
+                self.app.local_groups[group].add_role(self._admin_role_id, apply_to_application=True)
 
         self.discover_models()
 
+        log.info("Finished Looker discovery")
         return
 
     def discover_roles(self) -> None:
@@ -99,6 +99,8 @@ class OAALooker():
         Additionally store the names of the models the role has access to, model discovery happens separately but we need
         saving this information avoids repeat API calls later.
         """
+
+        log.info("Discovering Looker roles")
 
         tracked_permissions = ["administer", "access_data", "develop", "explore", "see_lookml", "use_sql_runner"]
         all_permissions = self.looker_con.all_permissions()
@@ -115,59 +117,54 @@ class OAALooker():
 
         all_roles = self.looker_con.all_roles()
         for r in all_roles:
-            looker_role = self.__looker_roles[r.name] = LookerRole(r.name, r.id)
-            role = self.app.add_local_role(r.name)
-            # self.__role_ids[r.id] = r.name
+            looker_role = self._looker_roles[r.id] = LookerRole(r.name, r.id)
+            role = self.app.add_local_role(r.name, unique_id=r.id)
+
+            if r.name == "Admin":
+                # save the admin role ID for later
+                self._admin_role_id = r.id
 
             # only include permissions for the role that have been defined in the OAA app
             role_permissions = [p for p in r.permission_set.permissions if p in self.app.custom_permissions]
             role.add_permissions(role_permissions)
             for model in r.model_set.models:
-                logging.debug(f"Adding {model=} for {r.name=}")
-                if model in self.__model_roles:
-                    self.__model_roles[model].append(r.name)
+                if model in self._model_roles:
+                    self._model_roles[model].append(r.id)
                 else:
-                    self.__model_roles[model] = [r.name]
+                    self._model_roles[model] = [r.id]
 
             # have to use raw API to get users and groups for roles, the sdk "helpfully" gets the complete list of users who have a role combining direct
             # and group based assignments, the API allows to get the exact path of assignement
-            role_users = self.__looker_api_get(f"/api/3.1/roles/{r.id}/users", params={"direct_association_only": True, "fields": "display_name,email"})
-            logging.debug(f"{role_users=}")
+            role_users = self._looker_api_get(f"/api/3.1/roles/{r.id}/users", params={"direct_association_only": True, "fields": "id,display_name,email"})
             for user in role_users:
-                if user["display_name"]:
-                    looker_role.users.append(user['display_name'])
-                else:
-                    looker_role.users.append(user['email'])
+                looker_role.users.append(str(user["id"]))
 
-            role_groups = self.__looker_api_get(f"/api/3.1/roles/{r.id}/groups", params={"fields": ["name"]})
-            logging.debug(f"{role_groups=}")
+            role_groups = self._looker_api_get(f"/api/3.1/roles/{r.id}/groups", params={"fields": ["id","name"]})
             for group in role_groups:
-                looker_role.groups.append(group['name'])
+                looker_role.groups.append(str(group['id']))
 
         return
 
     def discover_groups(self) -> None:
         """ discover the group information only, membership is handled by the user discovery """
+
+        log.info("Discovering Looker groups")
         all_groups = self.looker_con.all_groups()
 
         for g in all_groups:
-            # print(g)
             group_name = g.name
             group_id = g.id
-            group = self.app.add_local_group(group_name)
-            group.set_property("id", group_id)
-
-            # store group id to name for later use
-            self.__group_ids[group_id] = group_name
+            group = self.app.add_local_group(group_name, unique_id=group_id)
 
         return
 
     def discover_users(self) -> None:
         """ discover all the users and populate their groups """
+
+        log.info("Discovering Looker users")
         all_users = self.looker_con.all_users()
 
         for u in all_users:
-            logging.debug(f"Adding users {u.display_name} - ({u.email})")
             if u.display_name:
                 user_name = u.display_name
             else:
@@ -179,8 +176,7 @@ class OAALooker():
             # first_name = u.first_name
             # last_name = u.last_name
 
-            local_user = self.app.add_local_user(user_name, identities=[u.email])
-            local_user.set_property("id", u.id)
+            local_user = self.app.add_local_user(user_name, unique_id=u.id, identities=[u.email])
             local_user.set_property("verified_looker_employee", u.verified_looker_employee)
             local_user.set_property("presumed_looker_employee", u.presumed_looker_employee)
 
@@ -192,63 +188,82 @@ class OAALooker():
             #     local_user.created_at = u.credentials_email.created_at
             #     if u.credentials_email.logged_in_at:
             #         local_user.last_login_at = u.credentials_email.logged_in_at
+
             for group_id in u.group_ids:
-                try:
-                    group_name = self.__group_ids[group_id]
-                except KeyError:
-                    log.error(f"Unknown group id {group_id} for user {user_name}")
+                if group_id not in self.app.local_groups:
+                    log.warning(f"User assigned to unknown group: {user_name} ({u.id}) - group id {group_id}")
                     continue
-                local_user.add_group(group_name)
+                local_user.add_group(group_id)
 
     def discover_models(self) -> None:
         """ Looker model_sets are the group of models that a role has access too. For each model_set discover
         the models and assign the roles with access. Which roles have access to which models was saved during
         role discovery
         """
+
+        log.info("Discovering Looker models")
         for model_set in self.looker_con.all_model_sets():
-            logging.debug(f"Processing model set {model_set.name}")
+            log.debug(f"Processing model set {model_set.name}")
             model_set_resource = self.app.add_resource(model_set.name, resource_type="model_set")
-            model_set_resource.set_property("id", model_set.id)
+            model_set_resource.set_property("id", int(model_set.id))
             model_set_resource.set_property("built_in", model_set.built_in)
             model_set_resource.set_property("all_access", model_set.all_access)
 
             # go through all users with role
             for model_name in model_set.models:
-                logging.debug(f"Adding model {model_name} to model set {model_set.name}")
+
+                # model sets may include models that no longer exists, ensure we can get the model information first
+                try:
+                    model = self._looker_api_get(f"/api/3.1/lookml_models/{model_name}")
+                except HTTPError as e:
+                    if e.response.status_code == 404:
+                        log.warning(f"Unable to find model in model set, may have been deleted, model name: {model_name}")
+                        continue
+                    else:
+                        raise e
+
+                log.debug(f"Adding model to model set {model_set.name}, model: {model_name}")
                 model_resource = model_set_resource.add_sub_resource(model_name, resource_type="model")
 
-                logging.debug(f"{self.__model_roles[model_name]=}")
-                model = self.__looker_api_get(f"/api/3.1/lookml_models/{model_name}")
+                model_connection_resources = []
                 for connection_name in model['allowed_db_connection_names']:
                     connection = self.looker_con.connection(connection_name)
+                    log.debug(f"Adding connection to model {model_name}, connection {connection.name}")
                     connection_resource = model_resource.add_sub_resource(connection.name, resource_type="connection")
-                    connection_resource.set_property("dialiect", connection.dialect_name)
+                    connection_resource.set_property("dialect", connection.dialect_name)
                     connection_resource.set_property("host", connection.host)
                     connection_resource.set_property("username", connection.username)
+                    model_connection_resources.append(connection_resource)
 
-                for role_name in self.__model_roles[model_name]:
-                    logging.debug(f"Need to add {role_name=} to {model_name=}")
-                    self.assign_role_to_resource(role_name, model_resource)
-                    self.assign_role_to_resource(role_name, connection_resource)
+                for role_id in self._model_roles.get(model_name, []):
+                    self.assign_role_to_resource(role_id, [model_resource])
+                    self.assign_role_to_resource(role_id, model_connection_resources)
 
-    def assign_role_to_resource(self, role_name: str, resource: CustomResource) -> None:
+    def assign_role_to_resource(self, role_id: str, resources: list[CustomResource]) -> None:
         """ helper function to assign all the users/groups with a role to an OAA resource """
-        if role_name not in self.__looker_roles:
-            raise Exception(f"Unknown role {role_name}, not in internal model")
+        if role_id not in self._looker_roles:
+            raise Exception(f"Unknown role {role_id}, not in internal model")
 
-        role = self.__looker_roles[role_name]
-        for user in role.users:
-            if user not in self.app.local_users:
-                logging.error(f"Unknown user {user}, may be support user")
+        if role_id not in self.app.local_roles:
+            log.error(f"Cannot assign unknown role to resources, role_id {role_id}")
+            return
+
+        role = self._looker_roles[role_id]
+        for user_id in role.users:
+            if user_id not in self.app.local_users:
+                log.error(f"Unknown user assigned to resource {user_id}, may be support user")
                 continue
-            self.app.local_users[user].add_role(role_name, [resource])
+            self.app.local_users[user_id].add_role(role_id, resources)
 
-        for group in role.groups:
-            self.app.local_groups[group].add_role(role_name, [resource])
+        for group_id in role.groups:
+            if group_id not in self.app.local_groups:
+                log.error(f"Unknown group assigned to resource, {group_id}")
+                continue
+            self.app.local_groups[group_id].add_role(role_id, resources)
 
         return
 
-    def __looker_api_get(self, path: str, params: dict = {}) -> dict:
+    def _looker_api_get(self, path: str, params: dict = {}) -> dict:
         """ perform direct Looker API GET, used when SDK cannot get information, performs the login function if token
         is not already generated. Does not handle pagination.
 
@@ -257,13 +272,13 @@ class OAALooker():
         looker_url = os.getenv("LOOKERSDK_BASE_URL").rstrip("/")
         path = path.lstrip("/")
         if not self.__looker_token:
-            self.__looker_api_login()
+            self._looker_api_login()
 
         headers = {}
         headers["Authorization"] = f"token {self.__looker_token}"
         headers["Accept"] = "application/json"
 
-        logging.info(f"GET({looker_url}/{path})")
+        log.info(f"GET({looker_url}/{path})")
         response = requests.get(f"{looker_url}/{path}", headers=headers, params=params, timeout=120)
         if response.ok:
             return response.json()
@@ -276,10 +291,10 @@ class OAALooker():
                     message = data
             except json.decoder.JSONDecodeError:
                 message = response.text()
-            logging.error(f"Error {response.status_code}, url: {looker_url}/{path}: {message}")
+            log.error(f"Error {response.status_code}, url: {looker_url}/{path}: {message}")
             raise HTTPError(message, response=response)
 
-    def __looker_api_login(self) -> None:
+    def _looker_api_login(self) -> None:
         """
         Performs the Looker login to retrieve a token using the same environment variables as the SDK
         """
@@ -297,7 +312,7 @@ class OAALooker():
         else:
             # unfortunately login error does not return helpful information, it returns the id and secret used to login
             # to avoid printing that to logs raise a message, can investigate if really needed
-            logging.error("Unable to login to Looker API, please validate credentials")
+            log.error("Unable to login to Looker API, please validate credentials")
             raise HTTPError("Unable to login to Looker API", response=response)
 
 
@@ -331,15 +346,15 @@ def run(veza_url: str, veza_api_key: str, save_json: bool = False, verbose: bool
         oaa_looker = OAALooker()
         oaa_looker.discover()
     except looker_sdk.error.SDKError as e:
-        logging.error("Discovery failed due to SDK API call error")
+        log.error("Discovery failed due to SDK API call error")
         # looker errors may be html, search string for 404 ¯\_(ツ)_/¯
         if "404" in str(e.args):
-            logging.error("404 errors can indicate permissions issues, check permissions for Looker user")
+            log.error("404 errors can indicate permissions issues, check permissions for Looker user")
         sys.exit(2)
     except HTTPError as e:
-        logging.error("Discovery failed due to API error")
+        log.error("Discovery failed due to API error")
         if e.response.status_code == 404:
-            logging.error("404 errors can indicate permissions issues, check permissions for Looker user")
+            log.error("404 errors can indicate permissions issues, check permissions for Looker user")
         sys.exit(2)
 
     provider_name = "Looker"

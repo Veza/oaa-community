@@ -1,5 +1,8 @@
 # GitLab Connector Change Log
 
+## 2022/1/23
+* Removed `oaaclient` symlink and added `oaaclient` dependency to requirements file. Run `pip install -r requirements.txt` to install `oaaclient` package
+
 ## 2022/11/30
 * Fix for collecting external user ID for self-hosted SSO users
 

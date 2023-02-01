@@ -124,11 +124,9 @@ To connect GitHub Enterprise instance provide the URL to use for GitHub API call
 
 ### Container
 
-A `Dockerfile` to build a container is included in the repository..
+A `Dockerfile` to build a container is included in the repository that can be used with the `docker build` command.
 
-Build the container. Must be run from the parent directory (repository root) in order to include the `oaaclient` code.
-
-* `docker build . -f ./github/Dockerfile -t oaa_github`
+  `docker build . -t oaa_github:latest`
 
 To run the container, all required parameters must be provided as environment variables. The GitHub key can be included by mounting the file or as a base64 encoded string.
 
@@ -142,7 +140,7 @@ Run by mounting a .pem key file:
   -e GITHUB_KEY=/oaa/key.pem \
   -e VEZA_URL=https://<Veza URL> \
   -e VEZA_API_KEY=<Veza API Key> \
-  oaa_github
+  oaa-github
   ```
 
 Run using Base64-encoded key as variable:
@@ -154,7 +152,7 @@ Run using Base64-encoded key as variable:
   -e GITHUB_KEY_BASE64=<b64 encoded key> \
   -e VEZA_URL=https://<Veza URL> \
   -e VEZA_API_KEY=<Veza API Key> \
-  oaa_github
+  oaa-github
   ```
 
 ### Parameters

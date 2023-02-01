@@ -1,2 +1,2 @@
 requests>=2.27
-oaaclient>=1.0.4
+oaaclient>=1.0.4,<2.0

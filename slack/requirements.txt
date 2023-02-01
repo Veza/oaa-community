@@ -1,2 +1,2 @@
-oaaclient>=1.0
+oaaclient>=1.0.4,<2
 slack-sdk>=3.18.4

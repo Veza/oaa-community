@@ -37,6 +37,9 @@ instructions bellow to configure and provide the credentials.
    2. To discover a repository's permissions by group membership and users the **Admin** permission on Repository is required. If omitted the connector will fall back to user effective permissions.
 
 ### Atlassian Credentials Setup (Optional)
+The Bitbucket connector uses the Atlassian API to retrieve user email addresses to enable Bitbucket user to IdP linking. If you do not configure and provide Atlassian credentials the connector can run
+but will not collect identity information for Bitbucket users.
+
 1. Generate an [Atlassian API token](https://support.atlassian.com/atlassian-account/docs/manage-api-tokens-for-your-atlassian-account/) for the same account
 
 ### Veza API Key

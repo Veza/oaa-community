@@ -7,17 +7,19 @@ license that can be found in the LICENSE file or at
 https://opensource.org/licenses/MIT.
 """
 
-from oaaclient.client import OAAClient, OAAClientError
-from oaaclient.templates import CustomApplication, CustomResource, OAAPermission, OAAPropertyType, LocalUser, LocalGroup
-from requests import HTTPError
-from requests.auth import HTTPBasicAuth
 import argparse
 import logging
-import oaaclient.utils as oaautils
 import os
 import re
-import requests
 import sys
+import time
+
+import oaaclient.utils as oaautils
+import requests
+from oaaclient.client import OAAClient, OAAClientError
+from oaaclient.templates import CustomApplication, CustomResource, OAAPermission, OAAPropertyType
+from requests import HTTPError
+from requests.auth import HTTPBasicAuth
 
 logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s', level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -302,11 +304,14 @@ class OAABitbucket():
             path = path.lstrip("/")
             url = f"https://api.bitbucket.org/2.0/{path}"
 
+        retries = 0
         values = []
         while True:
-            response = requests.get(url, auth=self._http_auth, params=params, timeout=60)
+            try:
+                response = requests.get(url, auth=self._http_auth, params=params, timeout=60)
+                response.raise_for_status()
 
-            if response.ok:
+                retries = 0
                 data = response.json()
                 if "page" not in data:
                     # none list response, single entity get
@@ -317,11 +322,28 @@ class OAABitbucket():
                     url = data['next']
                     values.extend(data['values'])
                 else:
-                    # list response in single page or last itteration
+                    # list response in single page or last iteration
                     values.extend(data['values'])
                     break
-            else:
-                raise HTTPError(response.reason, response=response)
+
+            except requests.exceptions.HTTPError as e:
+                if e.response.status_code in [429, 500, 502, 503, 504] and retries < 5:
+                    log.warning(f"Bitbucket API returned error, {e}")
+                    retries += 1
+                    log.warning(f"Retrying {retries} of 5")
+                    time.sleep(retries * 1)
+                    continue
+                else:
+                    raise e
+            except requests.exceptions.RequestException as e:
+                log.warning(f"Bitbucket API error making call, {e}")
+                if retries < 5:
+                    retries += 1
+                    log.warning(f"Retrying {retries} of 5")
+                    time.sleep(retries * 1)
+                    continue
+                else:
+                    raise e
 
         return values
 
@@ -360,7 +382,12 @@ def run(bitbucket_workspace: str, bitbucket_username: str, bitbucket_app_key: st
 
     bitbucket = OAABitbucket(bitbucket_workspace, bitbucket_username, bitbucket_app_key)
 
-    bitbucket.discover()
+    try:
+        bitbucket.discover()
+    except requests.exceptions.RequestException as e:
+        log.error(f"Error making Bitbucket API Call: {e}")
+        log.debug(f"{e.response.text}")
+        raise e
 
     log.info("Starting push")
     provider_name = "Bitbucket"

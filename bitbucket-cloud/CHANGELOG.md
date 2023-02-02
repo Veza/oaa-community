@@ -1,4 +1,7 @@
 # Bitbucket Cloud Changelog
+## 2023/2/2
+* Added retry logic to Bitbucket API calls and improved error logging
+
 ## 2023/1/20
 * Add support for `collaborator` workspace permission
 

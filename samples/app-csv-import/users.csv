@@ -1,0 +1,12 @@
+user_name,email,full_name,created_at,last_login,is_active,department
+skalinsky0,skalinsky0@example.com,Simon Kalinsky,2021-04-08T08:58:54Z,2022-12-11T06:22:15Z,false,Human Resources
+jchirm1,jchirm1@example.io,Joli Chirm,2022-04-30T11:46:17Z,2022-10-23T11:45:15Z,false,Business Development
+sburrow2,sburrow2@example.com,Suellen Burrow,2020-02-24T09:04:07Z,2022-06-28T11:22:51Z,true,Business Development
+jwilacot3,jwilacot3@example.com,Juliane Wilacot,2020-06-19T01:48:46Z,2023-01-02T07:38:54Z,false,Training
+kpattlel4,kpattlel4@example.io,Korie Pattlel,2022-05-23T19:01:40Z,2022-04-13T17:13:06Z,true,Human Resources
+ntaynton5,ntaynton5@example.com,Nappy Taynton,2020-11-26T12:39:58Z,2022-06-03T08:37:34Z,true,Human Resources
+acorradini6,acorradini6@example.com,Ario Corradini,2021-09-25T09:28:28Z,2022-11-21T19:53:54Z,true,Services
+rboxell7,rboxell7@example.com,Rycca Boxell,2020-01-26T12:19:01Z,2022-08-24T10:01:37Z,false,Business Development
+vrendbaek8,vrendbaek8@example.io,Verney Rendbaek,2021-06-17T07:58:53Z,2022-12-31T11:16:37Z,false,Research and Development
+mgingedale9,mgingedale9@example.com,Maynord Gingedale,2020-04-22T22:44:18Z,2022-10-15T04:02:59Z,false,Research and Development
+backup_user,,Backup User,,,true,IT

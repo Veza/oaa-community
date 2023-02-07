@@ -1,4 +1,9 @@
 # Bitbucket Cloud Changelog
+
+## 2023/2/6
+* Changes to Bitbucket group discovery.
+* Support for Oauth authentication workflow
+
 ## 2023/2/2
 * Added retry logic to Bitbucket API calls and improved error logging
 

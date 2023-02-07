@@ -39,13 +39,15 @@ class OAABitbucket():
         app (CustomApplication): Populate by the `discover()` method
     """
 
-    def __init__(self, workspace: str, username: str, app_key: str) -> None:
+    def __init__(self, workspace: str, username: str = "", app_key: str = "", client_key: str = "", client_secret: str = "") -> None:
 
 
         self.workspace = workspace
-        self._http_auth = HTTPBasicAuth(username, app_key)
+
 
         self.app = CustomApplication(f"Bitbucket - {workspace}", application_type="Bitbucket")
+
+        self.app.property_definitions.define_local_group_property("owner", OAAPropertyType.STRING)
 
         self.app.property_definitions.define_resource_property("Project", "key", OAAPropertyType.STRING)
         self.app.property_definitions.define_resource_property("Project", "is_private", OAAPropertyType.BOOLEAN)
@@ -55,6 +57,21 @@ class OAABitbucket():
         self.app.property_definitions.define_resource_property("Repo", "project_key", OAAPropertyType.STRING)
 
         self._populate_perms()
+
+        self._oauth_token = None
+        self._http_auth = None
+
+        if client_key and client_secret:
+            self._oauth_token = self.bitbucket_oauth_login(client_key, client_secret)
+            log.info("Using Oauth authentication")
+        elif username and app_key:
+            self._http_auth = HTTPBasicAuth(username, app_key)
+        else:
+            raise ValueError("Must provide username and app_key or client_key and client_secret for authentication")
+
+        self.atlassian_login = os.getenv("ATLASSIAN_LOGIN", "")
+        self.atlassian_api_key = os.getenv("ATLASSIAN_API_KEY")
+
         pass
 
     def discover(self) -> None:
@@ -107,16 +124,64 @@ class OAABitbucket():
         """
 
         log.info("Starting workspace groups discovery")
-        groups = self.bitbucket_api_get(f"https://api.bitbucket.org/1.0/groups/{self.workspace}")
-        for group in groups:
-            slug = group.get("slug")
-            name = group.get("name")
-            local_group = self.app.add_local_group(name=name, unique_id=slug)
+        if self._oauth_token:
+            log.debug("Attempting to discover groups using internal API")
+            groups = self.bitbucket_api_get(f"https://api.bitbucket.org/internal/workspaces/{self.workspace}/groups", params={"pagelen": 100})
+            for g in groups:
+                slug = g.get("slug")
+                name = g.get("name")
+                group_type = g.get("type")
+                if group_type != "group":
+                    log.warning(f"Discovered group of known type: {g}")
 
-            for member in group.get("members", []):
-                member_id = member.get("account_id")
-                if member_id in self.app.local_users:
-                    self.app.local_users[member_id].add_group(slug)
+                local_group = self.app.add_local_group(name=name, unique_id=slug)
+                owner = g.get("owner", {}).get("username")
+                if owner:
+                    local_group.set_property("owner", owner)
+                else:
+                    log.debug(f"Unable to determine owner for group {g}")
+
+                self._discover_group_members(slug)
+
+        else:
+            log.debug("Using v1 API for groups discovery")
+            groups = self.bitbucket_api_get(f"https://api.bitbucket.org/1.0/groups/{self.workspace}")
+            for group in groups:
+                slug = group.get("slug")
+                name = group.get("name")
+                local_group = self.app.add_local_group(name=name, unique_id=slug)
+
+                for member in group.get("members", []):
+                    member_id = member.get("account_id")
+                    if member_id in self.app.local_users:
+                        self.app.local_users[member_id].add_group(slug)
+
+        log.info("Finished workspace groups discovery")
+        return
+
+    def _discover_group_members(self, group_slug: str) -> None:
+        """Discovery members for single group
+
+        Uses the Bitbucket internal API to discovery members for a group. Requires Oauth workflow.
+
+        Populates self.app.local_users memberships
+
+        Args:
+            group_slug (str): Group slug to discover for
+        """
+        if not self._oauth_token:
+            log.error("Cannot discover group members without oauth token")
+            return
+
+        log.debug(f"Discovery group memberships for {group_slug}")
+        members = self.bitbucket_api_get(f"https://api.bitbucket.org/internal/workspaces/{self.workspace}/groups/{group_slug}/members", params={"pagelen": 100})
+        for u in members:
+            account_id = u.get("account_id")
+            if account_id not in self.app.local_users:
+                log.warning(f"Unknown user to discovered as member of group: {group_slug}, {u}")
+                continue
+
+            self.app.local_users[account_id].add_group(group_slug)
 
         return
 
@@ -177,7 +242,7 @@ class OAABitbucket():
                     if e.response.status_code == 403:
                         # user does not have admin permission on repository, cannot retrieve explicit perms
                         # set to false to stop trying on future repos
-                        log.info("Unable to get explicit repository permissions, falling back to user perms")
+                        log.warning("Unable to get explicit repository permissions, falling back to user perms")
                         try_explicit_permissions = False
                     else:
                         # something else went wrong
@@ -304,11 +369,19 @@ class OAABitbucket():
             path = path.lstrip("/")
             url = f"https://api.bitbucket.org/2.0/{path}"
 
+        # determine which authentication flow we're using
+        auth = None
+        headers = {}
+        if self._oauth_token:
+            headers["Authorization"] = f"Bearer {self._oauth_token}"
+        else:
+            auth = self._http_auth
+
         retries = 0
         values = []
         while True:
             try:
-                response = requests.get(url, auth=self._http_auth, params=params, timeout=60)
+                response = requests.get(url, auth=auth, headers=headers, params=params, timeout=60)
                 response.raise_for_status()
 
                 retries = 0
@@ -347,6 +420,22 @@ class OAABitbucket():
 
         return values
 
+    def bitbucket_oauth_login(self, client_key, client_secret) -> str:
+
+        token = ""
+
+        auth = HTTPBasicAuth(client_key, client_secret)
+
+        response = requests.post("https://bitbucket.org/site/oauth2/access_token", auth=auth, data={"grant_type": "client_credentials"})
+        response.raise_for_status()
+        if response.ok:
+            data = response.json()
+            token = data.get("access_token")
+            if not token:
+                log.error("0Auth login request did not return an auth token")
+
+        return token
+
     def _populate_perms(self) -> None:
         """Create OAA Permissions and Roles
         """
@@ -360,7 +449,15 @@ class OAABitbucket():
         self.app.add_custom_permission("read", apply_to_sub_resources=True, permissions=[OAAPermission.DataRead])
 
 
-def run(bitbucket_workspace: str, bitbucket_username: str, bitbucket_app_key: str, veza_url: str, veza_api_key: str, save_json: bool = False, debug: bool = False):
+def run(bitbucket_workspace: str,
+        bitbucket_username: str,
+        bitbucket_app_key: str,
+        veza_url: str,
+        veza_api_key: str,
+        save_json: bool = False,
+        debug: bool = False,
+        oauth_client_key: str = "",
+        oauth_client_secret: str = "") -> None:
     """Run Bitbucket connector
 
     This function can be imported to run the connector from another Python source.
@@ -380,7 +477,7 @@ def run(bitbucket_workspace: str, bitbucket_username: str, bitbucket_app_key: st
 
     veza_con = OAAClient(veza_url, api_key=veza_api_key)
 
-    bitbucket = OAABitbucket(bitbucket_workspace, bitbucket_username, bitbucket_app_key)
+    bitbucket = OAABitbucket(bitbucket_workspace, bitbucket_username, bitbucket_app_key, oauth_client_key, oauth_client_secret)
 
     try:
         bitbucket.discover()
@@ -445,14 +542,12 @@ def main():
     # Bitbucket parameters
     if not bitbucket_workspace:
         oaautils.log_arg_error(log, "--workspace", "BITBUCKET_WORKSPACE")
+
     bitbucket_username = os.getenv("BITBUCKET_USER")
     bitbucket_app_key = os.getenv("BITBUCKET_APP_KEY")
+    bitbucket_oauth_client_key = os.getenv("BITBUCKET_CLIENT_KEY")
+    bitbucket_oauth_client_secret = os.getenv("BITBUCKET_CLIENT_SECRET")
 
-    if not bitbucket_username:
-        oaautils.log_arg_error(log, env="BITBUCKET_USER")
-
-    if not bitbucket_app_key:
-        oaautils.log_arg_error(log, env="BITBUCKET_APP_KEY")
     # Veza Parameters
     veza_api_key = os.getenv('VEZA_API_KEY')
     if not veza_url:
@@ -461,12 +556,25 @@ def main():
         oaautils.log_arg_error(log, env="VEZA_API_KEY")
 
 
-    if None in [bitbucket_workspace, bitbucket_username, bitbucket_app_key, veza_url, veza_api_key]:
+    if not ((bitbucket_oauth_client_key and bitbucket_oauth_client_secret) or (bitbucket_username and bitbucket_app_key)):
+        log.error("No Bitbucket authentication credentials provided")
+        breakpoint()
+        # more helpful
+        sys.exit(1)
+
+    if None in [bitbucket_workspace, veza_url, veza_api_key]:
         log.error("Missing one or more required parameters")
         sys.exit(1)
 
-    run(bitbucket_workspace=bitbucket_workspace, bitbucket_username=bitbucket_username,
-        bitbucket_app_key=bitbucket_app_key, veza_url=veza_url, veza_api_key=veza_api_key, save_json=save_json, debug=debug)
+    run(bitbucket_workspace=bitbucket_workspace,
+        bitbucket_username=bitbucket_username,
+        bitbucket_app_key=bitbucket_app_key,
+        veza_url=veza_url,
+        veza_api_key=veza_api_key,
+        save_json=save_json,
+        debug=debug,
+        oauth_client_key=bitbucket_oauth_client_key,
+        oauth_client_secret=bitbucket_oauth_client_secret)
 
 if __name__ == '__main__':
     # replace the log with the root logger if running as main

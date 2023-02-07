@@ -32,9 +32,23 @@ instructions bellow to configure and provide the credentials.
 
 ## Setup
 ### Bitbucket Credentials Setup
-1. Create an [App Password](https://support.atlassian.com/bitbucket-cloud/docs/app-passwords/) for a Bitbucket user with Admin permissions
-   1. Select **Read** for the following permissions: Account , Workspace Membership, Project, Repositories
-   2. To discover a repository's permissions by group membership and users the **Admin** permission on Repository is required. If omitted the connector will fall back to user effective permissions.
+
+1. Create an Oauth Consumer by navigating to the Workspace Settings then **OAuth consumers** under **Apps and Features** and clicking the **Add Consumer** button.
+2. Configure the following parameters for the new Consumer:
+   1. **Name**
+   2. **Callback URL** - Required value but not used, set to `http://localhost`
+   3. Check the box for `This is a private consumer`
+   4. Under Permissions Check the following boxes:
+      1. **Account - Read**
+      2. **Workspace Membership - Read**
+      3. **Projects - Read**
+      4. **Repositories - Admin**
+
+      The Repositories Admin permission is required to discover repository permissions by group membership (e.g. the Developers group has write access). Without Admin permission, all permission discovery is user based. The connector can be ran with only Read permission on Repository but it will be significantly slower and may encounter timeout issues at larger deployments.
+
+3. After the Consumer is created click on the consumer to view its **Key** and **Secret**
+
+> Previous versions of the connector utilized user App Keys for authentication. This method is still supported but no longer the recommended method. If Oauth Connector credentials are being utilized any previous App Keys should be deleted.
 
 ### Atlassian Credentials Setup (Optional)
 The Bitbucket connector uses the Atlassian API to retrieve user email addresses to enable Bitbucket user to IdP linking. If you do not configure and provide Atlassian credentials the connector can run
@@ -58,8 +72,8 @@ but will not collect identity information for Bitbucket users.
 
     ```shell
     export VEZA_API_KEY=<Veza API key>
-    export BITBUCKET_USER=<Bitbucket User>
-    export BITBUCKET_APP_KEY=<Bitbucket App key>
+    export BITBUCKET_CLIENT_KEY=<Bitbucket Oauth Client Key>
+    export BITBUCKET_CLIENT_SECRET=<Bitbucket Oauth Client Secret>
     ```
 
     > Note: for Windows environments use the `set` command instead of `export` and do not include quotation marks around the parameter values
@@ -70,14 +84,18 @@ but will not collect identity information for Bitbucket users.
    ```
 
 ## Application Parameters & Environment Variabls
-| Parameter     | Environment Variable  | Required | Notes                                                              |
-| ------------- | --------------------- | -------- | ------------------------------------------------------------------ |
-| `--workspace` | `BITBUCKET_WORKSPACE` | Yes      | Name of Bitbucket workspace                                        |
-| n/a           | `BITBUCKET_USER`      | Yes      | Bitbucket user for connection                                      |
-| n/a           | `BITBUCKET_APP_KEY`   | Yes      | App key generated for Bitbucket user                               |
-| `--veza-url`  | `VEZA_URL`            | Yes      | URL of Veza instance                                               |
-| n/a           | `VEZA_API_KEY`        | Yes      | Veza API key                                                       |
-| n/a           | `ATLASSIAN_LOGIN`     | No       | For discovering Bitbucket user identity emails using Atlassian API |
-| n/a           | `ATLASSIAN_API_KEY`   | No       | Optional Atlassian API key for Atlassian API                       |
-| `--save-json` | n/a                   | No       | Save the OAA JSON to file before upload                            |
-| `--debug`     | `OAA_DEBUG`           | No       | Enable OAA debug, for environment variable set to any value        |
+| Parameter     | Environment Variable      | Required | Notes                                                              |
+| ------------- | ------------------------- | -------- | ------------------------------------------------------------------ |
+| `--workspace` | `BITBUCKET_WORKSPACE`     | Yes      | Name of Bitbucket workspace                                        |
+| n/a           | `BITBUCKET_CLIENT_KEY`    | Yes*     | Bitbucket Oauth Client Key                                         |
+| n/a           | `BITBUCKET_CLIENT_SECRET` | Yes*     | Bitbucket Oauth Client Secret                                      |
+| n/a           | `BITBUCKET_USER`          | No       | Bitbucket user for connection (legacy)                             |
+| n/a           | `BITBUCKET_APP_KEY`       | No       | App key generated for Bitbucket user  (legacy)                     |
+| `--veza-url`  | `VEZA_URL`                | Yes      | URL of Veza instance                                               |
+| n/a           | `VEZA_API_KEY`            | Yes      | Veza API key                                                       |
+| n/a           | `ATLASSIAN_LOGIN`         | No       | For discovering Bitbucket user identity emails using Atlassian API |
+| n/a           | `ATLASSIAN_API_KEY`       | No       | Optional Atlassian API key for Atlassian API                       |
+| `--save-json` | n/a                       | No       | Save the OAA JSON to file before upload                            |
+| `--debug`     | `OAA_DEBUG`               | No       | Enable OAA debug, for environment variable set to any value        |
+
+> * `BITBUCKET_CLIENT_KEY` and `BITBUCKET_CLIENT_SECRET` are not required if using `BITBUCKET_USER` and `BITBUCKET_APP_KEY`

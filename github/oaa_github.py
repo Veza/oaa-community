@@ -10,7 +10,7 @@ https://opensource.org/licenses/MIT.
 from datetime import datetime, timedelta, timezone
 from oaaclient.client import OAAClient, OAAClientError
 from oaaclient.templates import CustomApplication, CustomPermission, OAAPermission, OAAPropertyType, CustomResource
-from oaaclient.utils import log_arg_error
+from oaaclient.utils import log_arg_error, build_report
 from requests import HTTPError
 from urllib.parse import urlparse, urlsplit
 import argparse
@@ -838,7 +838,7 @@ def load_user_map(oaa_app, user_map):
             exit(1)
 
 
-def run(org_name, app_id, veza_url, oaa_user, veza_api_key, key_file=None, base64_key=None, user_map=None, save_json=False, github_url=None, debug=False):
+def run(org_name, app_id, veza_url, oaa_user, veza_api_key, key_file=None, base64_key=None, user_map=None, save_json=False, github_url=None, debug=False, create_report=False):
 
     if debug or os.getenv("OAA_DEBUG"):
         log.setLevel(logging.DEBUG)
@@ -907,6 +907,7 @@ def run(org_name, app_id, veza_url, oaa_user, veza_api_key, key_file=None, base6
     else:
         log.info(f"Creating Provider {provider_name}")
         provider = veza_con.create_provider(provider_name, "application")
+        create_report = True
     log.info(f"Provider: {provider['name']} ({provider['id']})")
 
     veza_con.update_provider_icon(provider['id'], GITHUB_MARK_ICON)
@@ -925,6 +926,24 @@ def run(org_name, app_id, veza_url, oaa_user, veza_api_key, key_file=None, base6
                 log.error(d)
         sys.exit(1)
 
+    if create_report:
+        report_source_file = "report.json"
+        if os.path.isfile(report_source_file):
+            log.info(f"Creating or updating report from {report_source_file}")
+            with open(report_source_file) as f:
+                report_definition = json.load(f)
+            response = build_report(veza_con, report_definition)
+            report_id = response.get("id")
+            if report_id:
+                log.info(f"Report available at: {veza_url}/app/reports/{report_id}, Veza may still be populating report data")
+            else:
+                log.error("Report creation did not return ID")
+                log.info(json.dumps(response))
+        else:
+            log.warning(f"Unable to create report, cannot locate source file {report_source_file}")
+
+
+    log.info("Run finished")
 
 ###########################################################
 # Main
@@ -940,6 +959,7 @@ def main():
     parser.add_argument("--oaa-user", required=False, default=os.getenv("OAA_USER"), help="Veza username for OAA connection")
     parser.add_argument("--debug", action="store_true", help="Enable verbose debug logging")
     parser.add_argument("--save-json", action="store_true", help="Save OAA JSON payload to file")
+    parser.add_argument("--create-report", action="store_true", help="Create/update a Veza Report with common Queries. Defaults to true for first discovery.")
     args = parser.parse_args()
 
     org_name = args.org
@@ -973,8 +993,7 @@ def main():
         log.error("GitHub API not provided via --key-file or one of OS environment GITHUB_KEY or GITHUB_KEY_BASE64")
         sys.exit(1)
 
-    run(org_name, app_id, veza_url, oaa_user, veza_api_key, key_file=key_file, base64_key=base64_key, user_map=user_map, save_json=save_json, github_url=github_url, debug=debug)
-
+    run(org_name, app_id, veza_url, oaa_user, veza_api_key, key_file=key_file, base64_key=base64_key, user_map=user_map, save_json=save_json, github_url=github_url, debug=debug, create_report=args.create_report)
 
 if __name__ == '__main__':
     # replace the log with the root logger if running as main

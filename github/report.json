@@ -1,0 +1,498 @@
+{
+    "name": "GitHub",
+    "version": 1,
+    "queries": [
+        {
+            "name": "GitHub Users",
+            "description": "Total GitHub users",
+            "category": "IDP_ANALYSIS",
+            "level": "BASIC",
+            "result_type": "NUMBER",
+            "query_type": "SOURCE_TO_DESTINATION",
+            "source_node_types": {
+                "nodes": [
+                    {
+                        "node_type": "CustomUser",
+                        "tags": [],
+                        "conditions": [
+                            {
+                                "fn": "EQ",
+                                "property": "application_type",
+                                "value": "Github",
+                                "not": false
+                            }
+                        ],
+                        "node_id": "",
+                        "excluded_tags": [],
+                        "count_conditions": []
+                    }
+                ],
+                "nodes_operator": "AND"
+            }
+        },
+        {
+            "name": "GitHub Outside Collaborators",
+            "description": "GitHub Outside collaborators grouped by repository",
+            "category": "IDP_ANALYSIS",
+            "level": "BASIC",
+            "result_type": "NUMBER",
+            "query_type": "SOURCE_TO_DESTINATION",
+            "source_node_types": {
+                "nodes": [
+                    {
+                        "node_type": "CustomUser",
+                        "tags": [],
+                        "conditions": [
+                            {
+                                "fn": "EQ",
+                                "property": "application_type",
+                                "value": "Github",
+                                "not": false
+                            },
+                            {
+                                "fn": "EQ",
+                                "property": "customprop_outsidecollaborator",
+                                "value": true,
+                                "not": false
+                            }
+                        ],
+                        "node_id": "",
+                        "excluded_tags": [],
+                        "count_conditions": []
+                    }
+                ],
+                "nodes_operator": "AND"
+            },
+            "destination_node_types": {
+                "nodes": [
+                    {
+                        "node_type": "CustomResource",
+                        "tags": [],
+                        "conditions": [
+                            {
+                                "fn": "EQ",
+                                "property": "resource_type",
+                                "value": "repository",
+                                "not": false
+                            },
+                            {
+                                "fn": "EQ",
+                                "property": "application_type",
+                                "value": "Github",
+                                "not": false
+                            }
+                        ],
+                        "node_id": "",
+                        "excluded_tags": [],
+                        "count_conditions": []
+                    }
+                ],
+                "nodes_operator": "AND"
+            }
+        },
+        {
+            "name": "GitHub Public Repositories",
+            "description": "Organization repositories that are not set to private, and accessible to everyone",
+            "category": "IDP_ANALYSIS",
+            "level": "BASIC",
+            "result_type": "NUMBER",
+            "query_type": "SOURCE_TO_DESTINATION",
+            "source_node_types": {
+                "nodes": [
+                    {
+                        "node_type": "CustomResource",
+                        "tags": [],
+                        "conditions": [
+                            {
+                                "fn": "EQ",
+                                "property": "resource_type",
+                                "value": "repository",
+                                "not": false
+                            },
+                            {
+                                "fn": "EQ",
+                                "property": "application_type",
+                                "value": "Github",
+                                "not": false
+                            },
+                            {
+                                "fn": "EQ",
+                                "property": "customprop_private",
+                                "value": false,
+                                "not": false
+                            }
+                        ],
+                        "node_id": "",
+                        "excluded_tags": [],
+                        "count_conditions": []
+                    }
+                ],
+                "nodes_operator": "AND"
+            }
+        },
+        {
+            "name": "GitHub Public Repositories Excluding Forks",
+            "description": "Repositories that are public and not forked from an upstream repository",
+            "category": "IDP_ANALYSIS",
+            "level": "BASIC",
+            "result_type": "NUMBER",
+            "query_type": "SOURCE_TO_DESTINATION",
+            "source_node_types": {
+                "nodes": [
+                    {
+                        "node_type": "CustomResource",
+                        "tags": [],
+                        "conditions": [
+                            {
+                                "fn": "EQ",
+                                "property": "resource_type",
+                                "value": "repository",
+                                "not": false
+                            },
+                            {
+                                "fn": "EQ",
+                                "property": "application_type",
+                                "value": "Github",
+                                "not": false
+                            },
+                            {
+                                "fn": "EQ",
+                                "property": "customprop_private",
+                                "value": false,
+                                "not": false
+                            },
+                            {
+                                "fn": "EQ",
+                                "property": "customprop_is_fork",
+                                "value": false,
+                                "not": false
+                            }
+                        ],
+                        "node_id": "",
+                        "excluded_tags": [],
+                        "count_conditions": []
+                    }
+                ],
+                "nodes_operator": "AND"
+            }
+        },
+        {
+            "name": "GitHub Users with Organization Admin",
+            "description": "Users who have Admin permission on the organization",
+            "category": "IDP_ANALYSIS",
+            "level": "BASIC",
+            "result_type": "NUMBER",
+            "query_type": "SOURCE_TO_DESTINATION",
+            "raw_permissions": {
+                "values": [
+                    "admin"
+                ],
+                "operator": "OR"
+            },
+            "source_node_types": {
+                "nodes": [
+                    {
+                        "node_type": "CustomUser",
+                        "tags": [],
+                        "conditions": [
+                            {
+                                "fn": "EQ",
+                                "property": "application_type",
+                                "value": "Github",
+                                "not": false
+                            }
+                        ],
+                        "node_id": "",
+                        "excluded_tags": [],
+                        "count_conditions": []
+                    }
+                ],
+                "nodes_operator": "AND"
+            },
+            "destination_node_types": {
+                "nodes": [
+                    {
+                        "node_type": "CustomApplication",
+                        "tags": [],
+                        "conditions": [
+                            {
+                                "fn": "EQ",
+                                "property": "application_type",
+                                "value": "Github",
+                                "not": false
+                            }
+                        ],
+                        "node_id": "",
+                        "excluded_tags": [],
+                        "count_conditions": []
+                    }
+                ],
+                "nodes_operator": "AND"
+            }
+        },
+        {
+            "name": "GitHub Users mapped to Okta Identities",
+            "description": "GitHub users connected to an Okta Identity",
+            "category": "IDP_ANALYSIS",
+            "level": "BASIC",
+            "result_type": "NUMBER",
+            "query_type": "SOURCE_TO_DESTINATION",
+            "source_node_types": {
+                "nodes": [
+                    {
+                        "node_type": "CustomUser",
+                        "tags": [],
+                        "conditions": [
+                            {
+                                "fn": "EQ",
+                                "property": "application_type",
+                                "value": "Github",
+                                "not": false
+                            }
+                        ],
+                        "node_id": "",
+                        "excluded_tags": [],
+                        "count_conditions": []
+                    }
+                ],
+                "nodes_operator": "AND"
+            },
+            "destination_node_types": {
+                "nodes": [
+                    {
+                        "node_type": "OktaUser",
+                        "tags": [],
+                        "conditions": [],
+                        "node_id": "",
+                        "excluded_tags": [],
+                        "count_conditions": []
+                    }
+                ],
+                "nodes_operator": "AND"
+            },
+            "no_relation": false
+        },
+        {
+            "name": "GitHub Users without Okta Identity",
+            "description": "GitHub users not connected to an Okta Identity",
+            "category": "IDP_ANALYSIS",
+            "level": "BASIC",
+            "result_type": "NUMBER",
+            "query_type": "SOURCE_TO_DESTINATION",
+            "source_node_types": {
+                "nodes": [
+                    {
+                        "node_type": "CustomUser",
+                        "tags": [],
+                        "conditions": [
+                            {
+                                "fn": "EQ",
+                                "property": "application_type",
+                                "value": "Github",
+                                "not": false
+                            }
+                        ],
+                        "node_id": "",
+                        "excluded_tags": [],
+                        "count_conditions": []
+                    }
+                ],
+                "nodes_operator": "AND"
+            },
+            "destination_node_types": {
+                "nodes": [
+                    {
+                        "node_type": "OktaUser",
+                        "tags": [],
+                        "conditions": [],
+                        "node_id": "",
+                        "excluded_tags": [],
+                        "count_conditions": []
+                    }
+                ],
+                "nodes_operator": "AND"
+            },
+            "no_relation": true
+        },
+        {
+            "name": "GitHub Users with inactive Okta Accounts",
+            "description": "GitHub users connected to Staged, Suspended, or Deactivated Okta accounts",
+            "category": "IDP_ANALYSIS",
+            "level": "PREMIUM_ANOMALY",
+            "result_type": "NUMBER",
+            "query_type": "SOURCE_TO_DESTINATION",
+            "source_node_types": {
+                "nodes": [
+                    {
+                        "node_type": "CustomUser",
+                        "tags": [],
+                        "conditions": [
+                            {
+                                "fn": "EQ",
+                                "property": "application_type",
+                                "value": "Github",
+                                "not": false
+                            }
+                        ],
+                        "node_id": "",
+                        "excluded_tags": [],
+                        "count_conditions": []
+                    }
+                ],
+                "nodes_operator": "AND"
+            },
+            "destination_node_types": {
+                "nodes": [
+                    {
+                        "node_type": "OktaUser",
+                        "tags": [],
+                        "conditions": [
+                            {
+                                "fn": "EQ",
+                                "property": "is_active",
+                                "value": false,
+                                "not": false
+                            }
+                        ],
+                        "node_id": "",
+                        "excluded_tags": [],
+                        "count_conditions": []
+                    }
+                ],
+                "nodes_operator": "AND"
+            }
+        },
+        {
+            "name": "GitHub Users with AzureAD Identity",
+            "description": "GitHub users connected to an AzureAD Identity",
+            "category": "IDP_ANALYSIS",
+            "level": "BASIC",
+            "result_type": "NUMBER",
+            "query_type": "SOURCE_TO_DESTINATION",
+            "source_node_types": {
+                "nodes": [
+                    {
+                        "node_type": "CustomUser",
+                        "tags": [],
+                        "conditions": [
+                            {
+                                "fn": "EQ",
+                                "property": "application_type",
+                                "value": "Github",
+                                "not": false
+                            }
+                        ],
+                        "node_id": "",
+                        "excluded_tags": [],
+                        "count_conditions": []
+                    }
+                ],
+                "nodes_operator": "AND"
+            },
+            "destination_node_types": {
+                "nodes": [
+                    {
+                        "node_type": "AzureADUser",
+                        "tags": [],
+                        "conditions": [],
+                        "node_id": "",
+                        "excluded_tags": [],
+                        "count_conditions": []
+                    }
+                ],
+                "nodes_operator": "AND"
+            },
+            "no_relation": false
+        },
+        {
+            "name": "GitHub Users without AzureAD Identity",
+            "description": "GitHub users not connected to an AzureAD Identity",
+            "category": "IDP_ANALYSIS",
+            "level": "BASIC",
+            "result_type": "NUMBER",
+            "query_type": "SOURCE_TO_DESTINATION",
+            "source_node_types": {
+                "nodes": [
+                    {
+                        "node_type": "CustomUser",
+                        "tags": [],
+                        "conditions": [
+                            {
+                                "fn": "EQ",
+                                "property": "application_type",
+                                "value": "Github",
+                                "not": false
+                            }
+                        ],
+                        "node_id": "",
+                        "excluded_tags": [],
+                        "count_conditions": []
+                    }
+                ],
+                "nodes_operator": "AND"
+            },
+            "destination_node_types": {
+                "nodes": [
+                    {
+                        "node_type": "AzureADUser",
+                        "tags": [],
+                        "conditions": [],
+                        "node_id": "",
+                        "excluded_tags": [],
+                        "count_conditions": []
+                    }
+                ],
+                "nodes_operator": "AND"
+            },
+            "no_relation": true
+        },
+        {
+            "name": "GitHub Users with inactive AzureAD Accounts",
+            "description": "GitHub users connected to an AzureAD account that is not active",
+            "category": "IDP_ANALYSIS",
+            "level": "PREMIUM_ANOMALY",
+            "result_type": "NUMBER",
+            "query_type": "SOURCE_TO_DESTINATION",
+            "source_node_types": {
+                "nodes": [
+                    {
+                        "node_type": "CustomUser",
+                        "tags": [],
+                        "conditions": [
+                            {
+                                "fn": "EQ",
+                                "property": "application_type",
+                                "value": "Github",
+                                "not": false
+                            }
+                        ],
+                        "node_id": "",
+                        "excluded_tags": [],
+                        "count_conditions": []
+                    }
+                ],
+                "nodes_operator": "AND"
+            },
+            "destination_node_types": {
+                "nodes": [
+                    {
+                        "node_type": "AzureADUser",
+                        "tags": [],
+                        "conditions": [
+                            {
+                                "fn": "EQ",
+                                "property": "is_active",
+                                "value": false,
+                                "not": false
+                            }
+                        ],
+                        "node_id": "",
+                        "excluded_tags": [],
+                        "count_conditions": []
+                    }
+                ],
+                "nodes_operator": "AND"
+            }
+        }
+    ]
+}

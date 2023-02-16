@@ -42,6 +42,21 @@ The following properties are set based on the GitHub properties
 | Repository | `allow_forking`            | Boolean if private forks are allowed                                                           |
 | Repository | `is_fork`                  | Boolean if repository is fork of another                                                       |
 
+### Reports
+Connect will automatically populate a Veza Insights Queries and Report with GitHub related quires on first run. Queries created include:
+
+  - GitHub Users
+  - GitHub Outside Collaborators
+  - GitHub Public Repositories
+  - GitHub Public Repositories Excluding Forks
+  - GitHub Users with Organization Admin
+  - GitHub Users mapped to Okta Identities
+  - GitHub Users without Okta Identity
+  - GitHub Users with inactive Okta Accounts
+  - GitHub Users with AzureAD Identity
+  - GitHub Users without AzureAD Identity
+  - GitHub Users with inactive AzureAD Accounts
+
 ## Setup
 
 ### GitHub Setup Instructions

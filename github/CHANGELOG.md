@@ -1,5 +1,10 @@
 # GitHub Connector Change Log
 
+## 2022/2/9
+* Added Veza Insights Report creator to connector. Connector will automatically create a GitHub Report with a number of prebuilt quires on first run. To populate the report with existing
+  systems run the connector with `--create-report` or using `oaaclient-report-builder report.json` from this folder.
+* Requires upgrade of the `oaaclient` to `1.1.0`
+
 ## 2022/1/23
 * Removed `oaaclient` symlink and added `oaaclient` dependency to requirements file. Run `pip install -r requirements.txt` to install `oaaclient` package
 

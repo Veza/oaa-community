@@ -55,6 +55,7 @@ The Bitbucket connector uses the Atlassian API to retrieve user email addresses 
 but will not collect identity information for Bitbucket users.
 
 1. Generate an [Atlassian API token](https://support.atlassian.com/atlassian-account/docs/manage-api-tokens-for-your-atlassian-account/) for the same account
+2. Ensure that the selected User has the **Browse users and groups** [Global Permission](https://support.atlassian.com/jira-cloud-administration/docs/manage-global-permissions/)
 
 ### Veza API Key
 1. Generate an API key for your Veza user. API keys can be managed in the Veza interface under Administration -> API Keys. For detailed instructions consult the Veza User Guide.

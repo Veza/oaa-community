@@ -325,8 +325,24 @@ class OAABitbucket():
         max_results = 100
         jira_user_list = []
         auth = HTTPBasicAuth(atlassian_login, atlassian_api_key)
+
+        # validate that the user has the correct permissions before continuing
+        try:
+            check_response = requests.get(f"https://{self.workspace}.atlassian.net/rest/api/3/mypermissions", params={"permissions": "USER_PICKER"}, auth=auth, timeout=60)
+            user_picker_permission = check_response.json().get("permissions", {}).get("USER_PICKER", {})
+            if not user_picker_permission.get("havePermission"):
+                log.error(f"Atlassian user does not have Browse Users Global Permission, cannot retrieve user identities. Atlassian user {atlassian_login}")
+                return
+        except requests.exceptions.RequestException as e:
+            log.error("Error while calling Atlassian API, unable to collect user identities")
+            log.error(e)
+            if e.response:
+                log.debug(e.response.text)
+            return
+
+        # get all the users
         while True:
-            response = requests.get(f"https://{self.workspace}.atlassian.net/rest/api/3/users/search?startAt={start_at}&maxResults={max_results}", auth=auth, timeout=60)
+            response = requests.get(f"https://{self.workspace}.atlassian.net/rest/api/3/users/search", params={"startAt": start_at, "maxResults": max_results}, auth=auth, timeout=60)
 
             if response.ok:
                 user_list = response.json()

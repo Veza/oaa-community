@@ -1,5 +1,8 @@
 # Bitbucket Cloud Changelog
 
+## 2023/2/16
+* Ensure that optional Atlassian user has required permissions to browse users for collecting user identities.
+
 ## 2023/2/6
 * Changes to Bitbucket group discovery.
 * Support for Oauth authentication workflow

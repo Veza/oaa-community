@@ -44,7 +44,7 @@ user's role in the group and associated permissions (e.g. Developer, Owner, Gues
 
 ## Setup
 ### GitLab Setup Instructions
-1. Generate a [GitLab access token](https://docs.gitlab.com/ee/security/token_overview.html) under GitLab *Edit profile* > * Access Tokens*.
+1. Generate a [GitLab access token](https://docs.gitlab.com/ee/security/token_overview.html) under GitLab *Edit profile* > *Access Tokens*.
   * For self-hosted it is recommended to generate a personal access token for an Admin-level user to enable full discovery.
   * For GitLab SaaS a group token is recommended for best results. Personal access tokens for group Owner can also be used.
 * Assign the access token `read_api` access only
@@ -56,26 +56,26 @@ user's role in the group and associated permissions (e.g. Developer, Owner, Gues
 
 ### Command Line
 1. With Python 3.8+ install the requirements either into a virtual environment or otherwise:
-    ```
+    ```shell
     pip3 install -r requirements.txt
     ```
 
-2. Set the Veza Veza API key and GitLab token in the environment
+2. Set the Veza Veza API key and GitLab token in the environment:
 
-    ```
+    ```shell
     export VEZA_API_KEY=<Veza API key>
     export GITLAB_ACCESS_TOKEN=<GitLab access token>
     ```
 
 3. Run the code:
 
-    ```
+    ```shell
     ./oaa_gitlab.py --gitlab-url <URL for GitLab> --veza-url <Veza URL>
     ```
 
     Optionally, all parameters can be passed via OS environment variables
 
-    ```
+    ```shell
     export GITLAB_URL=<GitLab URL>
     export GITLAB_ACCESS_TOKEN=<GitLab Access Token>
     export VEZA_URL=<Veza URL>
@@ -83,4 +83,4 @@ user's role in the group and associated permissions (e.g. Developer, Owner, Gues
     ./oaa_gitlab.py
     ```
 
-   > `GITLAB_URL` will default to `https://gitlab.com` if not set. For self-hosted you must set the `GITLAB_URL` environment variable or `--gitlab-url` at run time.
+   >__Note__: `GITLAB_URL` will default to `https://gitlab.com` if not set. For self-hosted you must set the `GITLAB_URL` environment variable or `--gitlab-url` at run time.

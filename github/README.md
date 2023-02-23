@@ -17,7 +17,7 @@ Once extracted, the metadata payload is pushed to a Veza instance for parsing. R
 
 This connector uses the OAA Application template to map applications and identities to permissions. The following table shows how Custom Application entities correspond to GitHub entities:
 
-| Github                        | Generic Application  |
+| GitHub                        | Generic Application  |
 | ----------------------------- | -------------------- |
 | organization                  | Application          |
 | members                       | Local User           |
@@ -31,13 +31,13 @@ This connector uses the OAA Application template to map applications and identit
 The following properties are set based on the GitHub properties
 
 | Entity     | Property                   | Description                                                                                    |
-| ---------- | -------------------------- | ---------------------------------------------------------------------------------------------- |
-| User       | `OutsideCollaborator`      | Boolean for users who are not a member of the org that are invited to one or more repositories |
+| -----------| ---------------------------| -----------------------------------------------------------------------------------------------|
+| User       | `OutsideCollaborator`      | Boolean for users who are not a member of the org and invited to one or more repositories      |
 | User       | `profile_name`             | The name the user has set in their profile                                                     |
 | User       | `emails`                   | List of emails discovered for the user                                                         |
 | Repository | `private`                  | Boolean `true` if repository is not public                                                     |
 | Repository | `visibility`               | Repo visibility, may be `public`, `private` or `internal`                                      |
-| Repository | `default_branch`           | Default branch for repository, branch name tested `default_branch_protected`                   |
+| Repository | `default_branch`           | Default branch for repository                                                                  |
 | Repository | `default_branch_protected` | Boolean `true` if any protections enabled on default branch                                    |
 | Repository | `allow_forking`            | Boolean if private forks are allowed                                                           |
 | Repository | `is_fork`                  | Boolean if repository is fork of another                                                       |
@@ -100,7 +100,11 @@ There are multiple options for running the connector. It can be run at the comma
 
 ### Command Line
 
-Ensure pip is up-to-date, dependencies will fail to install unless pip >= 21.0. Install the requirements with Python 3.8+: `pip3 install -r requirements.txt`
+Ensure pip is up-to-date, dependencies will fail to install unless pip >= 21.0. Install the requirements with Python 3.8+: 
+
+```shell
+pip3 install -r requirements.txt
+```
 
 Store the Veza username and Veza API key as environment variables:
 

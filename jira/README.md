@@ -74,11 +74,12 @@ to Lamda, GitHub actions and a variety of other platforms.
 
 ### Command Line
 1. Export the appropriate environmental variables. Variables not set can be passed via arguments at run time.
-```
-export VEZA_API_KEY="Zdkemfds..."
-export JIRA_TOKEN="lsjflmmxvn..."
-...
-```
+
+  ```shell
+  export VEZA_API_KEY="Zdkemfds..."
+  export JIRA_TOKEN="lsjflmmxvn..."
+  ...
+  ```
 1. Run the connector:
 
     `jira_veza_oaa.py --jira_url https://example.atlassian.net --vezaurl https://example.vezatrial.ai`
@@ -88,13 +89,13 @@ A `Dockerfile` to build a container is included in the repository. Running the c
 
 1. Build the container. Must be run from the parent directory (repository root) in order to include the `oaaclient` code.
 
-  ```
+  ```shell
   docker build . -f ./jira/Dockerfile -t oaa_jira
   ```
 
 1. To run the container, all required parameters must be provided as environment variables.
 
-  ```
+  ```shell
   docker run --rm \
     -e JIRA_USER="atlassian_api_user@example.com" \
     -e JIRA_TOKEN="qoierxmvkfnbsdflkjqwe" \
@@ -109,8 +110,8 @@ A `Dockerfile` to build a container is included in the repository. Running the c
 Parameter   | Environmental Variable | Required | Notes
 ------------|------------------------|----------|---------------------------------------------------------------------------------
 N/A         | `VEZA_API_KEY`         | true     | the API token which which to connect to the Veza instance
-`veza_url`  | N/A                    | true     | the url of the Veza instance to which the metadata will be uploaded
+`veza_url`  | `VEZA_URL`             | true     | the url of the Veza instance to which the metadata will be uploaded
 N/A         | `JIRA_TOKEN`           | true     | the API token with which to connect to the Jira Cloud instance
-`jira_url`  | N/A                    | true     | the url of the Jira Cloud instance
+`jira_url`  | `JIRA_URL`             | true     | the url of the Jira Cloud instance
 `jira_user` | `JIRA_USER`            | true     | the user with which to connect to the Jira Cloud instance
 `save_json` | N/A                    | false    | save a copy of the metadata JSON uploaded to the Veza instance to this directory

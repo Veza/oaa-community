@@ -52,7 +52,12 @@ Slack authentication is performed through creating a Slack App and granting the 
 ## Running the Connector
 
 ### Command Line
-1. Install the requirements `pip3 install -r requirements.txt`
+1. Install the requirements:
+
+   ```shell
+   pip3 install -r requirements.txt
+   ```
+
 2. Set the secrets:
 
    ```shell
@@ -61,6 +66,7 @@ Slack authentication is performed through creating a Slack App and granting the 
    ```
 
 3. Run the connector:
+
    ```shell
    ./oaa_slack.py --veza-url https://<your-org>.vezacloud.com
    ```

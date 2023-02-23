@@ -47,6 +47,7 @@ The following properties are collect by the connector:
     ```
 
 2. Export the Veza and PagerDusty API keys to the environment variables
+
     ```shell
     export VEZA_API_KEY="<Veza API Key>"
     export PAGERDUTY_API_KEY="<PagerDuty API Key>"

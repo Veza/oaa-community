@@ -73,37 +73,46 @@ There are multiple options to run the connector. Instructions are included for r
 to Lamda, GitHub actions and a variety of other platforms.
 
 ### Command Line
-1. Export the appropriate environmental variables. Variables not set can be passed via arguments at run time.
+1. Install the requirements with Python 3.8+:
 
-  ```shell
-  export VEZA_API_KEY="Zdkemfds..."
-  export JIRA_TOKEN="lsjflmmxvn..."
-  ...
-  ```
-1. Run the connector:
+   ```shell
+   pip3 install -r requirements.txt
+   ```
 
-    `jira_veza_oaa.py --jira_url https://example.atlassian.net --vezaurl https://example.vezatrial.ai`
+2. Export the required environmental variables. Variables not set can be passed via arguments at run time. All parameters can be passed using environment variables if desired. See table below for variable names and descriptions.
+
+   ```shell
+   export VEZA_API_KEY="Zdkemfds..."
+   export JIRA_TOKEN="lsjflmmxvn..."
+   ...
+   ```
+
+3. Run the connector:
+
+    ```shell
+    ./oaa_jira.py --jira_url https://example.atlassian.net --vezaurl https://example.vezatrial.ai
+    ```
 
 ### Docker
 A `Dockerfile` to build a container is included in the repository. Running the container will perform the Jira discovery and OAA push then exit. Schedule the container to run on a regular interval.
 
 1. Build the container. Must be run from the parent directory (repository root) in order to include the `oaaclient` code.
 
-  ```shell
-  docker build . -f ./jira/Dockerfile -t oaa_jira
-  ```
+   ```shell
+   docker build . -f ./jira/Dockerfile -t oaa_jira
+   ```
 
-1. To run the container, all required parameters must be provided as environment variables.
+2. To run the container, all required parameters must be provided as environment variables.
 
-  ```shell
-  docker run --rm \
+   ```shell
+   docker run --rm \
     -e JIRA_USER="atlassian_api_user@example.com" \
     -e JIRA_TOKEN="qoierxmvkfnbsdflkjqwe" \
     -e VEZA_URL="https://customer.vezacloud.com" \
     -e JIRA_URL="https://customer.atlassian.net" \
     -e VEZA_API_KEY="ZXlKaGJHY2lPaUpJVXpJM.....=" \
     oaa_jira
-  ```
+   ```
 
 ## Application Parameters / Environmental Variables
 

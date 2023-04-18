@@ -234,10 +234,14 @@ class OAAGitLab():
 
             # SAML identity for SSO should be available if configured
             if user_info.get("group_saml_identity"):
-                external_id = user_info["group_saml_identity"].get("extern_uid")
-                local_user.add_identities(external_id)
-                # set property for local_user is saml enabled
-                local_user.set_property("saml_login", True)
+                group_saml_identity = user_info["group_saml_identity"]
+                external_id = group_saml_identity.get("extern_uid")
+                if not external_id:
+                    log.warning(f"group_saml_identity does not contain external_id, {group_saml_identity}, user: {user_name} {user_id}")
+                else:
+                    local_user.add_identity(external_id)
+                    # set property for local_user is saml enabled
+                    local_user.set_property("saml_login", True)
 
             if user_info.get("is_admin"):
                 local_user.add_role(self.admin_role_name, apply_to_application=True)

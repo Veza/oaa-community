@@ -14,9 +14,13 @@ import logging
 import os
 import re
 import sys
+import time
 
 import requests
-from requests import HTTPError
+from requests.exceptions import HTTPError, RequestException
+from requests import Response
+from requests.exceptions import JSONDecodeError as RequestsJSONDecodeError
+from datetime import datetime
 
 import oaaclient.utils as oaautils
 from oaaclient.client import OAAClient, OAAClientError
@@ -25,6 +29,7 @@ from oaaclient.templates import CustomApplication, CustomResource, LocalGroup, L
 # logging handler
 logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s', level=logging.INFO)
 log = logging.getLogger(__name__)
+
 
 
 class OAAGitLab():
@@ -45,6 +50,7 @@ class OAAGitLab():
         perm_map (dictionary): Mapping of GitLab numeric access levels to name strings
     """
 
+    MAX_API_RETRIES = 5
     def __init__(self, gitlab_url: str, access_token: str, deployment_name: str = None) -> None:
         self.parent_name = None
         self.member_group_name = "Member"
@@ -72,7 +78,7 @@ class OAAGitLab():
         # test token
         try:
             calling_user = self._gl_api_get("/api/v4/user")
-        except HTTPError as e:
+        except RequestException as e:
             log.error(f"Error validating API token")
             raise(e)
 
@@ -382,7 +388,7 @@ class OAAGitLab():
         dictionary: API Response
 
         Raises:
-        HTTPError
+        RequestException
         """
         if not params:
             params = {}
@@ -397,32 +403,108 @@ class OAAGitLab():
 
         result = []
         while True:
-            response = requests.get(api_path, headers=headers, params=params, timeout=10)
-            if response.ok:
-                if "X-Next-Page" in response.headers:
-                    # multipage response
-                    result.extend(response.json())
-                    next_page = response.headers.get("X-Next-Page")
-                    if not next_page:
-                        # on the last page, break
-                        break
-                    else:
-                        params["page"] = next_page
+            response = self._perform_get(api_path, headers=headers, params=params, timeout=10)
+            try:
+                body = response.json()
+            except RequestsJSONDecodeError as e:
+                log.error("Unable to decode request response to JSON")
+                log.debug(response.text)
+                raise e
+
+            if "X-Next-Page" in response.headers:
+                # multipage response
+                result.extend(body)
+                next_page = response.headers.get("X-Next-Page")
+                if not next_page:
+                    # on the last page, break
+                    break
                 else:
-                    # single page response, return
-                    try:
-                        return response.json()
-                    except json.decoder.JSONDecodeError:
-                        raise HTTPError("Could not JSON decode API response", response=response)
+                    params["page"] = next_page
             else:
-                raise HTTPError(response.text, request=response.request, response=response)
+                # single page response, return
+                return body
 
         return result
+
+    def _perform_get(self, *args, **kwargs) -> Response:
+        """Performs single requests GET call
+
+        Wraps `requests.get()` and handles API retries for retriable response codes and GitLab rate-limit handling
+
+        Returns response object or raises a request exception for failures
+
+        """
+
+        try_count = 0
+        while True:
+            try_count += 1
+            try:
+                response = requests.get(*args, **kwargs)
+                response.raise_for_status()
+
+                return response
+            except requests.exceptions.HTTPError as e:
+                if try_count > self.MAX_API_RETRIES:
+                    raise e
+
+                if e.response.status_code not in [429, 500, 502, 503, 504]:
+                    # not a retryable error
+                    raise e
+
+                log.warning(f"GitLab API response error, {e}")
+                # set default sleep time
+                sleep_time = try_count * 1
+
+                ratelimit_remaining = e.response.headers.get("RateLimit-Remaining", "")
+                ratelimit_reset = e.response.headers.get("RateLimit-Reset", "")
+
+                if ratelimit_remaining and ratelimit_reset:
+                    try:
+                        ratelimit_remaining = int(ratelimit_remaining)
+                        retry_reset_time = datetime.utcfromtimestamp(int(ratelimit_reset))
+                        retry_reset_str = e.response.headers.get("RateLimit-ResetTime")
+                        utcnow = datetime.utcnow()
+                        if e.response.status_code == 429 or ratelimit_remaining < 1:
+                            log.warning(f"Rate limit exceeded, reset after {retry_reset_str}")
+                            if retry_reset_time > utcnow:
+                                # reset time is in the future
+                                sleep_delta = retry_reset_time - utcnow
+                                sleep_time = sleep_delta.seconds
+                                log.warning(f"Back off for {sleep_time} seconds")
+                            else:
+                                # reset time has already passed, fall back to default sleep time and retry
+                                pass
+
+                    except Exception as inner_e:
+                        log.error(f"Exception encountered processing ratelimit information: {inner_e}")
+                        log.error("Back off for one minute")
+                        sleep_time = 60
+                elif e.response.status_code == 429:
+                    log.warning("Rate limit returned without reset data in headers, back off for one minute")
+                    sleep_time = 60
+
+                log.warning(f"Retrying {try_count} of {self.MAX_API_RETRIES}")
+                log.debug(f"Sleeping for {sleep_time}")
+                time.sleep(sleep_time)
+                continue
+            except requests.exceptions.ConnectionError as e:
+                if try_count > self.MAX_API_RETRIES:
+                    raise e
+
+                # connection errors
+                log.warning(f"GitLab API connection error, {e}")
+                log.warning(f"Retrying {try_count} of {self.MAX_API_RETRIES}")
+                time.sleep(try_count * 1)
+
+            except requests.exceptions.RequestException as e:
+                # any other type of requests error
+                raise e
+
 
 def run(gitlab_url: str, gitlab_access_token: str, veza_url: str, veza_user: str, veza_api_key: str, save_json: bool = False, verbose: bool = False) -> None:
     """ run full OAA process, discovery GitLab entities, perpare OAA template and push to Veza """
     # log.basicConfig(format='%(asctime)s %(levelname)s: %(message)s', level=log.INFO)
-    if verbose:
+    if verbose or os.getenv("OAA_DEBUG", False):
         log.setLevel(logging.DEBUG)
         log.debug("Enabling verbose logging")
 
@@ -437,15 +519,13 @@ def run(gitlab_url: str, gitlab_access_token: str, veza_url: str, veza_user: str
     try:
         gitlab_app = OAAGitLab(gitlab_url, gitlab_access_token)
         gitlab_app.discover()
-    except HTTPError as e:
+    except RequestException as e:
         log.error(f"Error during discovery: GitLab API returned error: {e.response.status_code} for {e.request.url}")
         log.error(e)
         raise e
     except Exception as e:
         log.error(e)
         raise e
-    # payload = gitlab_app.app.get_payload()
-    # log.debug(json.dumps(payload, indent=2))
 
     provider_name = "GitLab"
     provider = veza_con.get_provider(provider_name)
@@ -511,10 +591,14 @@ def main() -> None:
     try:
         run(gitlab_url, gitlab_access_token, veza_url, veza_user, veza_api_key, save_json=args.save_json, verbose=args.verbose)
     except OAAClientError as e:
+        log.error("An error was encountered with the Veza API")
         log.error(e)
         log.error("Exiting with error")
         sys.exit(1)
-
+    except RequestException as e:
+        log.error("An error was encountered with the GitLab API")
+        log.error("Exiting with error")
+        sys.exit(1)
 
 if __name__ == '__main__':
     # replace the log with the root logger if running as main

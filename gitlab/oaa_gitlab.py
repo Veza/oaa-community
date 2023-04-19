@@ -403,7 +403,7 @@ class OAAGitLab():
 
         result = []
         while True:
-            response = self._perform_get(api_path, headers=headers, params=params, timeout=10)
+            response = self._perform_get(api_path, headers=headers, params=params, timeout=60)
             try:
                 body = response.json()
             except RequestsJSONDecodeError as e:
@@ -447,7 +447,7 @@ class OAAGitLab():
                 if try_count > self.MAX_API_RETRIES:
                     raise e
 
-                if e.response.status_code not in [429, 500, 502, 503, 504]:
+                if e.response.status_code not in [400, 429, 500, 502, 503, 504, 524, 525]:
                     # not a retryable error
                     raise e
 
@@ -495,7 +495,13 @@ class OAAGitLab():
                 log.warning(f"GitLab API connection error, {e}")
                 log.warning(f"Retrying {try_count} of {self.MAX_API_RETRIES}")
                 time.sleep(try_count * 1)
+            except requests.exceptions.ChunkedEncodingError as e:
+                if try_count > self.MAX_API_RETRIES:
+                    raise e
 
+                log.warning(f"GitLab API response included chunked encoding error, {e}")
+                log.warning(f"Retrying {try_count} of {self.MAX_API_RETRIES}")
+                time.sleep(try_count * 1)
             except requests.exceptions.RequestException as e:
                 # any other type of requests error
                 raise e
@@ -520,8 +526,7 @@ def run(gitlab_url: str, gitlab_access_token: str, veza_url: str, veza_user: str
         gitlab_app = OAAGitLab(gitlab_url, gitlab_access_token)
         gitlab_app.discover()
     except RequestException as e:
-        log.error(f"Error during discovery: GitLab API returned error: {e.response.status_code} for {e.request.url}")
-        log.error(e)
+        log.error(f"Error during GitLab discovery. API error {e}")
         raise e
     except Exception as e:
         log.error(e)

@@ -176,7 +176,7 @@ class OAAPagerDuty():
         params = {"limit": 100}
 
         while True:
-            members_response = pd_api_get(f"teams/{team_id}/members", self._pd_api_key)
+            members_response = pd_api_get(f"teams/{team_id}/members", api_key=self._pd_api_key, params=params)
             for member in members_response["members"]:
                 user_id = member["user"]["id"]
                 role = member["role"]

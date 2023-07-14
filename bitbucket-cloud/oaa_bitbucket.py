@@ -1,4 +1,4 @@
-#!env python3
+#!/usr/bin/env python3
 """
 Copyright 2022 Veza Technologies Inc.
 
@@ -7,12 +7,16 @@ license that can be found in the LICENSE file or at
 https://opensource.org/licenses/MIT.
 """
 
+from __future__ import annotations
+
 import argparse
+import json
 import logging
 import os
 import re
 import sys
 import time
+from datetime import datetime, timedelta
 
 import oaaclient.utils as oaautils
 import requests
@@ -34,20 +38,33 @@ class OAABitbucket():
         workspace (str): Bitbucket Cloud workspace to discover
         username (str): Username for Bitbucket connection
         app_key (str): App key generated for user
+        skip_branch_restriction_discovery (bool, optional): Set to True to skip branch protection discovery. Defaults to False.
 
     Parameters:
         app (CustomApplication): Populate by the `discover()` method
     """
 
-    def __init__(self, workspace: str, username: str = "", app_key: str = "", client_key: str = "", client_secret: str = "") -> None:
+    def __init__(self, workspace: str, username: str = "",
+                 app_key: str = "", client_key: str = "", client_secret: str = "",
+                 skip_branch_restriction_discovery: bool = False) -> None:
 
 
         self.workspace = workspace
+        self.skip_branch_restriction_discovery = skip_branch_restriction_discovery
+
+        # Defined the list of allowed branch restriction rules for which the data needs to be collected.
+        self.allowed_branch_restriction_rules = [
+            "allow_auto_merge_when_builds_pass", "require_passing_builds_to_merge", "enforce_merge_checks",
+            "require_approvals_to_merge", "require_default_reviewer_approvals_to_merge",
+            "require_tasks_to_be_completed"]
 
 
         self.app = CustomApplication(f"Bitbucket - {workspace}", application_type="Bitbucket")
 
+        self.app.property_definitions.define_local_user_property("email", OAAPropertyType.STRING)
         self.app.property_definitions.define_local_group_property("owner", OAAPropertyType.STRING)
+
+        self.app.property_definitions.define_local_user_property("is_collaborator", OAAPropertyType.BOOLEAN)
 
         self.app.property_definitions.define_resource_property("Project", "key", OAAPropertyType.STRING)
         self.app.property_definitions.define_resource_property("Project", "is_private", OAAPropertyType.BOOLEAN)
@@ -55,14 +72,24 @@ class OAABitbucket():
         self.app.property_definitions.define_resource_property("Repo", "is_private", OAAPropertyType.BOOLEAN)
         self.app.property_definitions.define_resource_property("Repo", "slug", OAAPropertyType.STRING)
         self.app.property_definitions.define_resource_property("Repo", "project_key", OAAPropertyType.STRING)
+        self.app.property_definitions.define_resource_property("Repo", "fork_policy", OAAPropertyType.STRING)
+
+        if not self.skip_branch_restriction_discovery:
+            self.app.property_definitions.define_resource_property("Repo", "default_branch_protected", OAAPropertyType.BOOLEAN)
+            for branch_restriction_rule in self.allowed_branch_restriction_rules:
+                self.app.property_definitions.define_resource_property("Repo", branch_restriction_rule, OAAPropertyType.BOOLEAN)
 
         self._populate_perms()
 
         self._oauth_token = None
         self._http_auth = None
+        self._oauth_expire_time = None
+        self._refresh_token = None
+        self._client_key = client_key
+        self._client_secret = client_secret
 
         if client_key and client_secret:
-            self._oauth_token = self.bitbucket_oauth_login(client_key, client_secret)
+            self._oauth_token = self.bitbucket_oauth_login()
             log.info("Using Oauth authentication")
         elif username and app_key:
             self._http_auth = HTTPBasicAuth(username, app_key)
@@ -89,14 +116,28 @@ class OAABitbucket():
     def _discover_workspace(self) -> None:
         """Perform workspace discovery
 
-        Get the workspace permissions which populatese all the workspace users
+        Get the workspace permissions which populates all the workspace users
         """
         log.info(f"Starting workspace discovery {self.workspace}")
         workspace_perms = self.bitbucket_api_get(f"workspaces/{self.workspace}/permissions")
         for e in workspace_perms:
-            account_name = e['user']['display_name']
-            account_id = e['user']['account_id']
-            account_uuid = e['user']['uuid']
+            user = e.get("user")
+            if not user:
+                log.warning("Workspace permission returned for non-user entity")
+                log.warning(f"type: {e.get('type', None)}, keys: {e.keys()}")
+                log.debug(json.dumps(e))
+                continue
+
+            account_name = user.get("display_name")
+            account_id = user.get("account_id")
+
+            if not account_id:
+                log.warning("User has no account_id, skipping ...")
+                log.debug(json.dumps(user))
+                continue
+
+            if not account_name:
+                account_name = account_id
 
             new_user = self.app.add_local_user(name=account_name, unique_id=account_id)
 
@@ -110,6 +151,11 @@ class OAABitbucket():
             if not e['permission'] in self.app.custom_permissions:
                 log.error(f"Unknown workspace permission for user: {e['permission']}")
                 continue
+
+            if e['permission'] == "collaborator":
+                new_user.set_property("is_collaborator", True)
+            else:
+                new_user.set_property("is_collaborator", False)
 
             new_user.add_permission(e['permission'], apply_to_application=True)
         return
@@ -198,7 +244,8 @@ class OAABitbucket():
             name = p["name"]
 
             project = self.app.add_resource(name, resource_type="Project")
-            project.description = p["description"]
+            if p.get("description"):
+                project.description = self._truncate_description(p.get("description", ""))
 
             project.set_property("key", p["key"])
             project.set_property("is_private", p["is_private"])
@@ -227,12 +274,33 @@ class OAABitbucket():
             slug = r['slug']
             project_key = r['project']['key']
             repo = project.add_sub_resource(name, resource_type="Repo")
-            repo.description = r["description"]
+            if r.get("description"):
+                repo.description = self._truncate_description(r.get("description", ""))
             repo.set_property("is_private", r["is_private"])
             repo.set_property("slug", slug)
             repo.set_property("project_key", project_key)
+            repo.set_property("fork_policy", r["fork_policy"])
 
+            try:
+                default_branch = r['mainbranch']['name']
+                if not self.skip_branch_restriction_discovery:
+                    repos_list_restrictions = self.bitbucket_api_get(f"repositories/{self.workspace}/{slug}/branch-restrictions",
+                                                                     params={"pagelen": 100, "pattern": default_branch})
+                    if repos_list_restrictions:
+                        repo.set_property("default_branch_protected", True)
+                    else:
+                        repo.set_property("default_branch_protected", False)
+                    for restrictions in repos_list_restrictions:
+                        if restrictions['pattern'] == default_branch and restrictions['kind'] in self.allowed_branch_restriction_rules:
+                            repo.set_property(restrictions['kind'], True)
 
+            except HTTPError as e:
+                if e.response.status_code == 403:
+                    log.warning("Permission denied on branch protections")
+                    self.skip_branch_restriction_discovery = True
+                    pass
+                else:
+                    raise e
             if try_explicit_permissions:
                 try:
                     self._discover_project_permission_explicit(repo_slug=slug, repo_resource=repo)
@@ -328,7 +396,9 @@ class OAABitbucket():
 
         # validate that the user has the correct permissions before continuing
         try:
-            check_response = requests.get(f"https://{self.workspace}.atlassian.net/rest/api/3/mypermissions", params={"permissions": "USER_PICKER"}, auth=auth, timeout=60)
+            check_response = requests.get(
+                f"https://{self.workspace}.atlassian.net/rest/api/3/mypermissions", params={"permissions": "USER_PICKER"},
+                auth=auth, timeout=60)
             user_picker_permission = check_response.json().get("permissions", {}).get("USER_PICKER", {})
             if not user_picker_permission.get("havePermission"):
                 log.error(f"Atlassian user does not have Browse Users Global Permission, cannot retrieve user identities. Atlassian user {atlassian_login}")
@@ -342,7 +412,9 @@ class OAABitbucket():
 
         # get all the users
         while True:
-            response = requests.get(f"https://{self.workspace}.atlassian.net/rest/api/3/users/search", params={"startAt": start_at, "maxResults": max_results}, auth=auth, timeout=60)
+            response = requests.get(
+                f"https://{self.workspace}.atlassian.net/rest/api/3/users/search", params={"startAt": start_at, "maxResults": max_results},
+                auth=auth, timeout=60)
 
             if response.ok:
                 user_list = response.json()
@@ -355,12 +427,13 @@ class OAABitbucket():
                         email = user.get("emailAddress")
                         if email:
                             self.app.local_users[account_id].add_identity(email)
+                            self.app.local_users[account_id].set_property("email", email)
 
                 jira_user_list.extend(user_list)
                 start_at += max_results
 
             else:
-                log.warning(f"Unable to retreive Atlassian user details, {response.reason}")
+                log.warning(f"Unable to retrieve Atlassian user details, {response.reason}")
                 break
 
         return
@@ -389,6 +462,8 @@ class OAABitbucket():
         auth = None
         headers = {}
         if self._oauth_token:
+            if self._oauth_expire_time and datetime.now() > self._oauth_expire_time:
+                self._oauth_token = self.bitbucket_oauth_login()
             headers["Authorization"] = f"Bearer {self._oauth_token}"
         else:
             auth = self._http_auth
@@ -436,19 +511,32 @@ class OAABitbucket():
 
         return values
 
-    def bitbucket_oauth_login(self, client_key, client_secret) -> str:
+    def bitbucket_oauth_login(self) -> str:
 
         token = ""
 
-        auth = HTTPBasicAuth(client_key, client_secret)
+        auth = HTTPBasicAuth(self._client_key, self._client_secret)
 
-        response = requests.post("https://bitbucket.org/site/oauth2/access_token", auth=auth, data={"grant_type": "client_credentials"})
+        if self._refresh_token:
+            log.debug("Refreshing oauth token")
+            response = requests.post("https://bitbucket.org/site/oauth2/access_token", auth=auth, data={"grant_type": "refresh_token", "refresh_token": self._refresh_token})
+        else:
+            response = requests.post("https://bitbucket.org/site/oauth2/access_token", auth=auth, data={"grant_type": "client_credentials"})
         response.raise_for_status()
+
         if response.ok:
             data = response.json()
             token = data.get("access_token")
             if not token:
                 log.error("0Auth login request did not return an auth token")
+
+            expires_in = data.get("expires_in")
+            self._refresh_token = data.get("refresh_token")
+            try:
+                self._oauth_expire_time = datetime.now() + timedelta(seconds=expires_in) - timedelta(minutes=5)
+                log.debug(f"Set oauth expire time to {self._oauth_expire_time.isoformat()}")
+            except Exception as e:
+                log.error(f"Unable to update oauth expire time. Will be unable to refresh token. {e}")
 
         return token
 
@@ -460,10 +548,23 @@ class OAABitbucket():
         self.app.add_custom_permission("collaborator",  permissions=[OAAPermission.DataRead, OAAPermission.DataWrite])
         self.app.add_custom_permission("member",  permissions=[OAAPermission.DataRead])
 
-        self.app.add_custom_permission("admin", apply_to_sub_resources=True, permissions=[OAAPermission.DataRead, OAAPermission.DataWrite, OAAPermission.DataDelete])
+        self.app.add_custom_permission(
+            "admin", apply_to_sub_resources=True, permissions=[OAAPermission.DataRead, OAAPermission.DataWrite, OAAPermission.DataDelete])
         self.app.add_custom_permission("write", apply_to_sub_resources=True, permissions=[OAAPermission.DataWrite, OAAPermission.DataRead])
         self.app.add_custom_permission("read", apply_to_sub_resources=True, permissions=[OAAPermission.DataRead])
 
+    def _truncate_description(self, description: str, length: int = 256) -> str|None:
+
+        try:
+            encoded = description.encode("utf-8", errors="replace")
+            truncated = encoded[:length]
+            result = truncated.decode("utf-8", errors="ignore")
+        except Exception as e:
+            log.error(f"Error shortening description, {e}")
+            log.debug(f"description original value: '{description}'")
+            return None
+
+        return result
 
 def run(bitbucket_workspace: str,
         bitbucket_username: str,
@@ -473,19 +574,29 @@ def run(bitbucket_workspace: str,
         save_json: bool = False,
         debug: bool = False,
         oauth_client_key: str = "",
-        oauth_client_secret: str = "") -> None:
+        oauth_client_secret: str = "",
+        skip_branch_restriction_discovery: bool = False,
+        create_report: bool = False
+        ) -> None:
     """Run Bitbucket connector
 
     This function can be imported to run the connector from another Python source.
 
     Args:
-        bitbucket_workspace (str): _description_
-        bitbucket_username (str): _description_
-        bitbucket_app_key (str): _description_
-        veza_url (str): _description_
-        veza_api_key (str): _description_
-        save_json (bool, optional): _description_. Defaults to False.
-        debug (bool, optional): _description_. Defaults to False.
+        bitbucket_workspace (str): Bitbucket Workspace for discovery
+        bitbucket_username (str): Username for Bitbucket user based authentication. Set to "" to use oauth.
+        bitbucket_app_key (str): User app key for user based authentication. Set to "" to use oauth.
+        veza_url (str): Veza tenant URL
+        veza_api_key (str): Veza API key
+        save_json (bool, optional): Set to true to save OAA payload to local file prior to push. Defaults to False.
+        debug (bool, optional): Set to True to enable verbose debug logging. Defaults to False.
+        oauth_client_key (str, optional): Bitbucket OAuth client key.. Defaults to "".
+        oauth_client_secret (str, optional): Bitbucket Oauth client secret.. Defaults to "".
+        skip_branch_restriction_discovery (bool, optional): Set to True to skip branch protection discovery. Defaults to False.
+
+    Raises:
+        RequestException: For errors encountered from Bitbucket API
+        OAAClientError: For errors encountered from Veza API
     """
 
     if debug:
@@ -493,7 +604,9 @@ def run(bitbucket_workspace: str,
 
     veza_con = OAAClient(veza_url, api_key=veza_api_key)
 
-    bitbucket = OAABitbucket(bitbucket_workspace, bitbucket_username, bitbucket_app_key, oauth_client_key, oauth_client_secret)
+    bitbucket = OAABitbucket(
+        bitbucket_workspace, bitbucket_username, bitbucket_app_key,
+        oauth_client_key, oauth_client_secret, skip_branch_restriction_discovery)
 
     try:
         bitbucket.discover()
@@ -510,6 +623,7 @@ def run(bitbucket_workspace: str,
     else:
         log.info(f"Creating Provider {provider_name}")
         provider = veza_con.create_provider(provider_name, "application")
+        create_report = True
     log.info(f"Provider: {provider['name']} ({provider['id']})")
 
     # set the Box icon
@@ -531,6 +645,21 @@ def run(bitbucket_workspace: str,
         log.error("Update did not finish")
         raise e
 
+    if create_report:
+        report_source_file = "report-bitbucket-security.json"
+        if os.path.isfile(report_source_file):
+            log.info(f"Creating or updating report from {report_source_file}")
+            with open(report_source_file) as f:
+                report_definition = json.load(f)
+            response = oaautils.build_report(veza_con, report_definition)
+            report_id = response.get("id")
+            if report_id:
+                log.info(f"Report available at: {veza_url}/app/reports/{report_id}, Veza may still be populating report data")
+            else:
+                log.error("Report creation did not return ID")
+                log.info(json.dumps(response))
+        else:
+            log.warning(f"Unable to create report, cannot locate source file {report_source_file}")
     return
 
 ###########################################################
@@ -539,12 +668,15 @@ def run(bitbucket_workspace: str,
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--workspace", required=False, default=os.getenv("BITBUCKET_WORKSPACE"), help="Name of Bitbucket workspace")
+    parser.add_argument("--skip-branch-restriction-discovery", action="store_true", help="Skip discovery of branch restriction rules")
     parser.add_argument("--veza-url", required=False, default=os.getenv("VEZA_URL"), help="Hostname for Veza deployment")
     parser.add_argument("--save-json", action="store_true", help="Save OAA JSON payload to file")
     parser.add_argument("--debug", action="store_true", help="Enable verbose debug output")
+    parser.add_argument("--create-report", action="store_true", help="Create/update a Veza Report with common Queries. Defaults to true for first discovery.")
     args = parser.parse_args()
 
     bitbucket_workspace = args.workspace
+    skip_branch_restriction_discovery = args.skip_branch_restriction_discovery
     veza_url = args.veza_url
     save_json = args.save_json
 
@@ -559,10 +691,10 @@ def main():
     if not bitbucket_workspace:
         oaautils.log_arg_error(log, "--workspace", "BITBUCKET_WORKSPACE")
 
-    bitbucket_username = os.getenv("BITBUCKET_USER")
-    bitbucket_app_key = os.getenv("BITBUCKET_APP_KEY")
-    bitbucket_oauth_client_key = os.getenv("BITBUCKET_CLIENT_KEY")
-    bitbucket_oauth_client_secret = os.getenv("BITBUCKET_CLIENT_SECRET")
+    bitbucket_username = os.getenv("BITBUCKET_USER", "")
+    bitbucket_app_key = os.getenv("BITBUCKET_APP_KEY", "")
+    bitbucket_oauth_client_key = os.getenv("BITBUCKET_CLIENT_KEY", "")
+    bitbucket_oauth_client_secret = os.getenv("BITBUCKET_CLIENT_SECRET", "")
 
     # Veza Parameters
     veza_api_key = os.getenv('VEZA_API_KEY')
@@ -574,23 +706,35 @@ def main():
 
     if not ((bitbucket_oauth_client_key and bitbucket_oauth_client_secret) or (bitbucket_username and bitbucket_app_key)):
         log.error("No Bitbucket authentication credentials provided")
-        breakpoint()
-        # more helpful
+        log.error("Must provider username and app key or Oauth client and secret")
         sys.exit(1)
 
     if None in [bitbucket_workspace, veza_url, veza_api_key]:
         log.error("Missing one or more required parameters")
         sys.exit(1)
 
-    run(bitbucket_workspace=bitbucket_workspace,
-        bitbucket_username=bitbucket_username,
-        bitbucket_app_key=bitbucket_app_key,
-        veza_url=veza_url,
-        veza_api_key=veza_api_key,
-        save_json=save_json,
-        debug=debug,
-        oauth_client_key=bitbucket_oauth_client_key,
-        oauth_client_secret=bitbucket_oauth_client_secret)
+    try:
+        run(bitbucket_workspace=bitbucket_workspace,
+            skip_branch_restriction_discovery=skip_branch_restriction_discovery,
+            bitbucket_username=bitbucket_username,
+            bitbucket_app_key=bitbucket_app_key,
+            veza_url=veza_url,
+            veza_api_key=veza_api_key,
+            save_json=save_json,
+            debug=debug,
+            oauth_client_key=bitbucket_oauth_client_key,
+            oauth_client_secret=bitbucket_oauth_client_secret,
+            create_report=args.create_report)
+    except requests.exceptions.RequestException as e:
+        log.error("Error encountered from Bitbucket API, exiting")
+        log.error(e)
+        sys.exit(1)
+    except OAAClientError as e:
+        log.error("Error encountered from Veza API, exiting")
+        log.error(e)
+        sys.exit(2)
+
+    log.info("Success")
 
 if __name__ == '__main__':
     # replace the log with the root logger if running as main

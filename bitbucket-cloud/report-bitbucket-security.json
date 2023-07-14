@@ -1,0 +1,670 @@
+{
+    "name": "Bitbucket Cloud Security",
+    "version": 1,
+    "queries": [
+        {
+            "name": "All Bitbucket Users",
+            "description": "All Bitbucket Users",
+            "result_type": "NUMBER",
+            "query_type": "SOURCE_TO_DESTINATION",
+            "variables": [],
+            "source_node_types": {
+                "nodes": [
+                    {
+                        "node_type": "CustomUser",
+                        "tags": [],
+                        "conditions": [
+                            {
+                                "fn": "EQ",
+                                "property": "application_type",
+                                "value": "Bitbucket",
+                                "not": false,
+                                "value_property_name": "",
+                                "value_property_from_other_node": false
+                            }
+                        ],
+                        "node_id": "",
+                        "excluded_tags": [],
+                        "count_conditions": [],
+                        "direct_relationship_only": false,
+                        "node_type_grouping_constraint": null
+                    }
+                ],
+                "nodes_operator": "AND"
+            },
+            "labels": ["inventory"],
+            "source_type": "CustomUser"
+        },
+        {
+            "name": "All Bitbucket Projects",
+            "description": "List of all Bitbucket Projects in Workspace",
+            "result_type": "NUMBER",
+            "query_type": "SOURCE_TO_DESTINATION",
+            "variables": [],
+            "source_node_types": {
+                "nodes": [
+                    {
+                        "node_type": "CustomResource",
+                        "tags": [],
+                        "conditions": [
+                            {
+                                "fn": "EQ",
+                                "property": "resource_type",
+                                "value": "Project",
+                                "not": false,
+                                "value_property_name": "",
+                                "value_property_from_other_node": false
+                            },
+                            {
+                                "fn": "EQ",
+                                "property": "application_type",
+                                "value": "Bitbucket",
+                                "not": false,
+                                "value_property_name": "",
+                                "value_property_from_other_node": false
+                            }
+                        ],
+                        "node_id": "",
+                        "excluded_tags": [],
+                        "count_conditions": [],
+                        "direct_relationship_only": false,
+                        "node_type_grouping_constraint": null
+                    }
+                ],
+                "nodes_operator": "AND"
+            },
+            "labels": ["inventory"],
+            "source_type": "CustomUser"
+        },
+        {
+            "name": "All Bitbucket Repositories",
+            "description": "List of all Bitbucket Repositories in Workspace",
+            "result_type": "NUMBER",
+            "query_type": "SOURCE_TO_DESTINATION",
+            "variables": [],
+            "source_node_types": {
+                "nodes": [
+                    {
+                        "node_type": "CustomSubResource",
+                        "tags": [],
+                        "conditions": [
+                            {
+                                "fn": "EQ",
+                                "property": "resource_type",
+                                "value": "Repo",
+                                "not": false,
+                                "value_property_name": "",
+                                "value_property_from_other_node": false
+                            },
+                            {
+                                "fn": "EQ",
+                                "property": "application_type",
+                                "value": "Bitbucket",
+                                "not": false,
+                                "value_property_name": "",
+                                "value_property_from_other_node": false
+                            }
+                        ],
+                        "node_id": "",
+                        "excluded_tags": [],
+                        "count_conditions": [],
+                        "direct_relationship_only": false,
+                        "node_type_grouping_constraint": null
+                    }
+                ],
+                "nodes_operator": "AND"
+            },
+            "labels": ["inventory"],
+            "source_type": "CustomUser"
+        },
+        {
+            "name": "All Bitbucket Users related connected Okta Identity",
+            "description": "All Bitbucket Users related connected Okta Identity",
+            "query_type": "SOURCE_TO_DESTINATION",
+            "source_node_types": {
+                "nodes": [
+                    {
+                        "node_type": "CustomUser",
+                        "tags": [],
+                        "conditions": [
+                            {
+                                "fn": "EQ",
+                                "property": "application_type",
+                                "value": "Bitbucket",
+                                "not": false,
+                                "value_property_name": "",
+                                "value_property_from_other_node": false
+                            }
+                        ],
+                        "node_id": "",
+                        "excluded_tags": [],
+                        "count_conditions": [],
+                        "direct_relationship_only": false,
+                        "node_type_grouping_constraint": null
+                    }
+                ],
+                "nodes_operator": "AND"
+            },
+            "labels": ["inventory"],
+            "source_type": "CustomUser",
+            "relates_to_exp": {
+                "specs": [
+                    {
+                        "node_types": {
+                            "nodes": [
+                                {
+                                    "node_type": "OktaUser",
+                                    "tags": [],
+                                    "conditions": [],
+                                    "node_id": "",
+                                    "excluded_tags": [],
+                                    "count_conditions": [],
+                                    "direct_relationship_only": false,
+                                    "node_type_grouping_constraint": null
+                                }
+                            ],
+                            "nodes_operator": "AND"
+                        },
+                        "required_intermediate_node_types": null,
+                        "avoided_intermediate_node_types": null,
+                        "raw_permissions": null,
+                        "effective_permissions": null,
+                        "no_relation": false,
+                        "direction": "ANY_DIRECTION"
+                    }
+                ],
+                "child_expressions": [],
+                "operator": "AND",
+                "not": false,
+                "and_op_type": "INFERRED"
+            }
+        },
+        {
+            "name": "All Bitbucket Users not connected to Okta Identity",
+            "description": "All Bitbucket Users not connected to Okta Identity",
+            "result_type": "NUMBER",
+            "query_type": "SOURCE_TO_DESTINATION",
+            "source_node_types": {
+                "nodes": [
+                    {
+                        "node_type": "CustomUser",
+                        "tags": [],
+                        "conditions": [
+                            {
+                                "fn": "EQ",
+                                "property": "application_type",
+                                "value": "Bitbucket",
+                                "not": false,
+                                "value_property_name": "",
+                                "value_property_from_other_node": false
+                            }
+                        ],
+                        "node_id": "",
+                        "excluded_tags": [],
+                        "count_conditions": [],
+                        "direct_relationship_only": false,
+                        "node_type_grouping_constraint": null
+                    }
+                ],
+                "nodes_operator": "AND"
+            },
+            "labels": [],
+            "source_type": "CustomUser",
+            "relates_to_exp": {
+                "specs": [
+                    {
+                        "node_types": {
+                            "nodes": [
+                                {
+                                    "node_type": "OktaUser",
+                                    "tags": [],
+                                    "conditions": [],
+                                    "node_id": "",
+                                    "excluded_tags": [],
+                                    "count_conditions": [],
+                                    "direct_relationship_only": false,
+                                    "node_type_grouping_constraint": null
+                                }
+                            ],
+                            "nodes_operator": "AND"
+                        },
+                        "required_intermediate_node_types": null,
+                        "avoided_intermediate_node_types": null,
+                        "raw_permissions": null,
+                        "effective_permissions": null,
+                        "no_relation": true,
+                        "direction": "ANY_DIRECTION"
+                    }
+                ],
+                "child_expressions": [],
+                "operator": "AND",
+                "not": false,
+                "and_op_type": "INFERRED"
+            }
+        },
+        {
+            "name": "All Bitbucket Users with owner permission on workspace",
+            "description": "All Bitbucket Users with owner permission on workspace",
+            "result_type": "NUMBER",
+            "query_type": "SOURCE_TO_DESTINATION",
+            "variables": [],
+            "source_node_types": {
+                "nodes": [
+                    {
+                        "node_type": "CustomPermission",
+                        "tags": [],
+                        "conditions": [
+                            {
+                                "fn": "EQ",
+                                "property": "application_type",
+                                "value": "Bitbucket",
+                                "not": false,
+                                "value_property_name": "",
+                                "value_property_from_other_node": false
+                            },
+                            {
+                                "fn": "EQ",
+                                "property": "name",
+                                "value": "owner",
+                                "not": false,
+                                "value_property_name": "",
+                                "value_property_from_other_node": false
+                            }
+                        ],
+                        "node_id": "",
+                        "excluded_tags": [],
+                        "count_conditions": [],
+                        "direct_relationship_only": false,
+                        "node_type_grouping_constraint": null
+                    }
+                ],
+                "nodes_operator": "AND"
+            },
+            "node_relationship_type": "EFFECTIVE_ACCESS",
+            "labels": [],
+            "source_type": "CustomPermission",
+            "relates_to_exp": {
+                "specs": [
+                    {
+                        "node_types": {
+                            "nodes": [
+                                {
+                                    "node_type": "CustomUser",
+                                    "tags": [],
+                                    "conditions": [
+                                        {
+                                            "fn": "EQ",
+                                            "property": "application_type",
+                                            "value": "Bitbucket",
+                                            "not": false,
+                                            "value_property_name": "",
+                                            "value_property_from_other_node": false
+                                        }
+                                    ],
+                                    "node_id": "",
+                                    "excluded_tags": [],
+                                    "count_conditions": [],
+                                    "direct_relationship_only": false,
+                                    "node_type_grouping_constraint": null
+                                }
+                            ],
+                            "nodes_operator": "AND"
+                        },
+                        "required_intermediate_node_types": null,
+                        "avoided_intermediate_node_types": null,
+                        "raw_permissions": null,
+                        "effective_permissions": null,
+                        "no_relation": false,
+                        "direction": "ANY_DIRECTION"
+                    }
+                ],
+                "child_expressions": [],
+                "operator": "AND",
+                "not": false,
+                "and_op_type": "INFERRED"
+            }
+        },
+        {
+            "name": "Bitbucket repositories without merge checks (branch protections) enabled",
+            "description": "Bitbucket repositories without merge checks (branch protections) enabled",
+            "result_type": "NUMBER",
+            "query_type": "SOURCE_TO_DESTINATION",
+            "source_node_types": {
+                "nodes": [
+                    {
+                        "node_type": "CustomSubResource",
+                        "tags": [],
+                        "conditions": [
+                            {
+                                "fn": "EQ",
+                                "property": "resource_type",
+                                "value": "Repo",
+                                "not": false,
+                                "value_property_name": "",
+                                "value_property_from_other_node": false
+                            },
+                            {
+                                "fn": "EQ",
+                                "property": "application_type",
+                                "value": "Bitbucket",
+                                "not": false,
+                                "value_property_name": "",
+                                "value_property_from_other_node": false
+                            },
+                            {
+                                "fn": "EQ",
+                                "property": "customprop_default_branch_protected",
+                                "value": false,
+                                "not": false,
+                                "value_property_name": "",
+                                "value_property_from_other_node": false
+                            }
+                        ],
+                        "node_id": "",
+                        "excluded_tags": [],
+                        "count_conditions": [],
+                        "direct_relationship_only": false,
+                        "node_type_grouping_constraint": null
+                    }
+                ],
+                "nodes_operator": "AND"
+            },
+            "node_relationship_type": "EFFECTIVE_ACCESS",
+            "labels": [],
+            "source_type": "CustomSubResource",
+            "relates_to_exp": {
+                "specs": [],
+                "child_expressions": [],
+                "operator": "AND",
+                "not": false,
+                "and_op_type": "INFERRED"
+            }
+        },
+        {
+            "name": "Bitbucket public repositories",
+            "description": "List all public repositories",
+            "result_type": "NUMBER",
+            "query_type": "SOURCE_TO_DESTINATION",
+            "source_node_types": {
+                "nodes": [
+                    {
+                        "node_type": "CustomSubResource",
+                        "tags": [],
+                        "conditions": [
+                            {
+                                "fn": "EQ",
+                                "property": "resource_type",
+                                "value": "Repo",
+                                "not": false,
+                                "value_property_name": "",
+                                "value_property_from_other_node": false
+                            },
+                            {
+                                "fn": "EQ",
+                                "property": "application_type",
+                                "value": "Bitbucket",
+                                "not": false,
+                                "value_property_name": "",
+                                "value_property_from_other_node": false
+                            },
+                            {
+                                "fn": "EQ",
+                                "property": "customprop_is_private",
+                                "value": false,
+                                "not": false,
+                                "value_property_name": "",
+                                "value_property_from_other_node": false
+                            }
+                        ],
+                        "node_id": "",
+                        "excluded_tags": [],
+                        "count_conditions": [],
+                        "direct_relationship_only": false,
+                        "node_type_grouping_constraint": null
+                    }
+                ],
+                "nodes_operator": "AND"
+            },
+            "node_relationship_type": "EFFECTIVE_ACCESS",
+            "source_type": "CustomSubResource"
+        },
+        {
+            "name": "All bitbucket public repositories with forking enabled",
+            "description": "All bitbucket public repositories with forking enabled",
+            "result_type": "NUMBER",
+            "query_type": "SOURCE_TO_DESTINATION",
+            "source_node_types": {
+                "nodes": [
+                    {
+                        "node_type": "CustomSubResource",
+                        "tags": [],
+                        "conditions": [
+                            {
+                                "fn": "EQ",
+                                "property": "resource_type",
+                                "value": "Repo",
+                                "not": false,
+                                "value_property_name": "",
+                                "value_property_from_other_node": false
+                            },
+                            {
+                                "fn": "EQ",
+                                "property": "application_type",
+                                "value": "Bitbucket",
+                                "not": false,
+                                "value_property_name": "",
+                                "value_property_from_other_node": false
+                            },
+                            {
+                                "fn": "EQ",
+                                "property": "customprop_fork_policy",
+                                "value": "allow_forks",
+                                "not": false,
+                                "value_property_name": "",
+                                "value_property_from_other_node": false
+                            },
+                            {
+                                "fn": "EQ",
+                                "property": "customprop_is_private",
+                                "value": false,
+                                "not": false,
+                                "value_property_name": "",
+                                "value_property_from_other_node": false
+                            }
+                        ],
+                        "node_id": "",
+                        "excluded_tags": [],
+                        "count_conditions": [],
+                        "direct_relationship_only": false,
+                        "node_type_grouping_constraint": null
+                    }
+                ],
+                "nodes_operator": "AND"
+            },
+            "node_relationship_type": "EFFECTIVE_ACCESS",
+            "labels": [],
+            "source_type": "CustomSubResource"
+        },
+        {
+            "name": "Bitbucket Users with collaborator permission to repos",
+            "description": "Bitbucket Users with collaborator permission to repos",
+            "result_type": "NUMBER",
+            "query_type": "SOURCE_TO_DESTINATION",
+            "source_node_types": {
+                "nodes": [
+                    {
+                        "node_type": "CustomUser",
+                        "tags": [],
+                        "conditions": [
+                            {
+                                "fn": "EQ",
+                                "property": "application_type",
+                                "value": "Bitbucket",
+                                "not": false,
+                                "value_property_name": "",
+                                "value_property_from_other_node": false
+                            },
+                            {
+                                "fn": "EQ",
+                                "property": "customprop_is_collaborator",
+                                "value": true,
+                                "not": false,
+                                "value_property_name": "",
+                                "value_property_from_other_node": false
+                            }
+                        ],
+                        "node_id": "",
+                        "excluded_tags": [],
+                        "count_conditions": [],
+                        "direct_relationship_only": false,
+                        "node_type_grouping_constraint": null
+                    }
+                ],
+                "nodes_operator": "AND"
+            },
+            "node_relationship_type": "EFFECTIVE_ACCESS",
+            "integration_types": [
+                "bitbucket"
+            ],
+            "labels": [],
+            "source_type": "CustomUser",
+            "relates_to_exp": {
+                "specs": [
+                    {
+                        "node_types": {
+                            "nodes": [
+                                {
+                                    "node_type": "CustomSubResource",
+                                    "tags": [],
+                                    "conditions": [
+                                        {
+                                            "fn": "EQ",
+                                            "property": "resource_type",
+                                            "value": "Repo",
+                                            "not": false,
+                                            "value_property_name": "",
+                                            "value_property_from_other_node": false
+                                        },
+                                        {
+                                            "fn": "EQ",
+                                            "property": "application_type",
+                                            "value": "Bitbucket",
+                                            "not": false,
+                                            "value_property_name": "",
+                                            "value_property_from_other_node": false
+                                        }
+                                    ],
+                                    "node_id": "",
+                                    "excluded_tags": [],
+                                    "count_conditions": [],
+                                    "direct_relationship_only": false,
+                                    "node_type_grouping_constraint": null
+                                }
+                            ],
+                            "nodes_operator": "AND"
+                        },
+                        "required_intermediate_node_types": null,
+                        "avoided_intermediate_node_types": null,
+                        "raw_permissions": null,
+                        "effective_permissions": null,
+                        "no_relation": false,
+                        "direction": "ANY_DIRECTION"
+                    }
+                ],
+                "child_expressions": [],
+                "operator": "AND",
+                "not": false,
+                "and_op_type": "INFERRED"
+            }
+        },
+        {
+            "name": "Bitbucket Repos to users with collaborator permission",
+            "description": "Bitbucket Repos to users with collaborator permission",
+            "result_type": "NUMBER",
+            "query_type": "SOURCE_TO_DESTINATION",
+            "source_node_types": {
+                "nodes": [
+                    {
+                        "node_type": "CustomSubResource",
+                        "tags": [],
+                        "conditions": [
+                            {
+                                "fn": "EQ",
+                                "property": "resource_type",
+                                "value": "Repo",
+                                "not": false,
+                                "value_property_name": "",
+                                "value_property_from_other_node": false
+                            },
+                            {
+                                "fn": "EQ",
+                                "property": "application_type",
+                                "value": "Bitbucket",
+                                "not": false,
+                                "value_property_name": "",
+                                "value_property_from_other_node": false
+                            }
+                        ],
+                        "node_id": "",
+                        "excluded_tags": [],
+                        "count_conditions": [],
+                        "direct_relationship_only": false,
+                        "node_type_grouping_constraint": null
+                    }
+                ],
+                "nodes_operator": "AND"
+            },
+            "node_relationship_type": "EFFECTIVE_ACCESS",
+            "labels": [],
+            "source_type": "CustomSubResource",
+            "relates_to_exp": {
+                "specs": [
+                    {
+                        "node_types": {
+                            "nodes": [
+                                {
+                                    "node_type": "CustomUser",
+                                    "tags": [],
+                                    "conditions": [
+                                        {
+                                            "fn": "EQ",
+                                            "property": "application_type",
+                                            "value": "Bitbucket",
+                                            "not": false,
+                                            "value_property_name": "",
+                                            "value_property_from_other_node": false
+                                        },
+                                        {
+                                            "fn": "EQ",
+                                            "property": "customprop_is_collaborator",
+                                            "value": true,
+                                            "not": false,
+                                            "value_property_name": "",
+                                            "value_property_from_other_node": false
+                                        }
+                                    ],
+                                    "node_id": "",
+                                    "excluded_tags": [],
+                                    "count_conditions": [],
+                                    "direct_relationship_only": false,
+                                    "node_type_grouping_constraint": null
+                                }
+                            ],
+                            "nodes_operator": "AND"
+                        },
+                        "required_intermediate_node_types": null,
+                        "avoided_intermediate_node_types": null,
+                        "raw_permissions": null,
+                        "effective_permissions": null,
+                        "no_relation": false,
+                        "direction": "ANY_DIRECTION"
+                    }
+                ],
+                "child_expressions": [],
+                "operator": "AND",
+                "not": false,
+                "and_op_type": "INFERRED"
+            }
+        }
+    ]
+}

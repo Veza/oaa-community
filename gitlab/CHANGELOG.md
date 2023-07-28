@@ -1,5 +1,11 @@
 # GitLab Connector Change Log
 
+## 2023/7/27
+* Added user property `email` for user's email if available
+
+## 2023/6/22
+* Fix for supporting users with Minimal Access role
+
 ## 2023/4/19
 * Improved GitLab API handler to add retries and rate-limit processing
 * Increased API timeout to 60 seconds

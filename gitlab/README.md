@@ -25,17 +25,18 @@ GitLab groups and sub-groups are represented both by a `Local Group` for members
 user's role in the group and associated permissions (e.g. Developer, Owner, Guest).
 
 ### Attributes
-| Entity  | Property        | Values                                                                |
-| ------- | --------------- | --------------------------------------------------------------------- |
-| User    | `bot`           | Boolean for bot users\*                                                 |
-| User    | `gitlab_id`     | Unique GitLab user ID number                                          |
-| User    | `is_licensed`   | State of GitLab license usage                                         |
-| User    | `state`         | Account state `active`, `blocked`, `deactivated`                      |
-| User    | `is_active`     | True if account state is `active`                                     |
-| User    | `created_at`    | Time user account was created                                         |
-| User    | `last_login_at` | Time of last user login to GitLab\* |
-| Project | `visibility`    | Project visibility, `private`, `internal`, `public`                   |
-| Project | `gitlab_id`     | Unique GitLab project ID number                                       |
+| Entity  | Property        | Values                                              |
+| ------- | --------------- | --------------------------------------------------- |
+| User    | `email`         | Email address for user if available                 |
+| User    | `bot`           | Boolean for bot users\*                             |
+| User    | `gitlab_id`     | Unique GitLab user ID number                        |
+| User    | `is_licensed`   | State of GitLab license usage                       |
+| User    | `state`         | Account state `active`, `blocked`, `deactivated`    |
+| User    | `is_active`     | True if account state is `active`                   |
+| User    | `created_at`    | Time user account was created                       |
+| User    | `last_login_at` | Time of last user login to GitLab\*                 |
+| Project | `visibility`    | Project visibility, `private`, `internal`, `public` |
+| Project | `gitlab_id`     | Unique GitLab project ID number                     |
 
 
 ### Limitations

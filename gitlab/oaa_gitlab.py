@@ -1,4 +1,4 @@
-#!env python3
+#!/usr/bin/env python3
 """
 Copyright 2022 Veza Technologies Inc.
 
@@ -101,6 +101,7 @@ class OAAGitLab():
         self.app.property_definitions.define_local_user_property("is_licensed", OAAPropertyType.STRING)
         self.app.property_definitions.define_local_user_property("state", OAAPropertyType.STRING)
         self.app.property_definitions.define_local_user_property("saml_login", OAAPropertyType.BOOLEAN)
+        self.app.property_definitions.define_local_user_property("email", OAAPropertyType.STRING)
 
         # define custom properties for group object
         self.app.property_definitions.define_resource_property("group", "gitlab_id", OAAPropertyType.NUMBER)
@@ -164,12 +165,16 @@ class OAAGitLab():
         for p in gitlab_permissions:
             self.app.add_custom_permission(p, gitlab_permissions[p], apply_to_sub_resources=True)
 
+        # Minimal access role is not recursive
+        self.app.add_custom_permission("Minimal access", [OAAPermission.NonData], apply_to_sub_resources=False)
+
         # GitLab Roles & groups
         self.app.add_local_role(self.admin_role_name, unique_id=self.admin_role_name, permissions=["Admin"])
         self.app.add_local_role(self.member_role_name, unique_id=self.member_role_name, permissions=["View"])
         self.app.add_local_group(self.member_group_name, unique_id=self.member_group_name)
 
         # Repo Roles
+        self.app.add_local_role("Minimal access", unique_id="Minimal access", permissions=["Minimal access"])
         self.app.add_local_role("Guest", unique_id="Guest", permissions=["View", "Pull"])
         self.app.add_local_role("Reporter", unique_id="Reporter", permissions=["View", "Pull"])
         self.app.add_local_role("Developer", unique_id="Developer", permissions=["View", "Pull", "Branch", "Push", "Merge"])
@@ -237,6 +242,7 @@ class OAAGitLab():
             # user email will only be available on self-hosted when run with Admin token
             if user_info.get("email"):
                 local_user.add_identities([user_info["email"]])
+                local_user.set_property("email", user_info["email"])
 
             # SAML identity for SSO should be available if configured
             if user_info.get("group_saml_identity"):
@@ -248,6 +254,9 @@ class OAAGitLab():
                     local_user.add_identity(external_id)
                     # set property for local_user is saml enabled
                     local_user.set_property("saml_login", True)
+                    if re.match(r".+@.+\..+", external_id):
+                        # external ID looks like an email, set it to the email property, not all external ids are emails
+                        local_user.set_property("email", external_id)
 
             if user_info.get("is_admin"):
                 local_user.add_role(self.admin_role_name, apply_to_application=True)
@@ -255,7 +264,12 @@ class OAAGitLab():
             if user_info.get("bot") is True:
                 local_user.set_property("bot", True)
 
-            local_user.add_group(self.member_group_name)
+            if user_info.get("access_level", 0) < 10:
+                # No access = 0, Minimal Access = 5, these users don't get access to internal repositories automatically
+                pass
+            else:
+                # Add users to the member group to give access to internal repositories
+                local_user.add_group(self.member_group_name)
 
         return self.app.local_users[user_id]
 
@@ -354,12 +368,11 @@ class OAAGitLab():
         for member in project_members:
             user_name = member['username']
             user_id = member["id"]
-            access_role = self._map_access_level(member['access_level'])
-            log.debug(f"Assigning {user_name} {access_role} to {project_name}")
-            if user_id not in self.app.local_users:
-                self.add_user(member)
-
-            self.app.local_users[user_id].add_role(access_role, [project_resource])
+            if member.get("access_level", 0) > 0:
+                if user_id not in self.app.local_users:
+                    self.add_user(member)
+                access_role = self._map_access_level(member['access_level'])
+                self.app.local_users[user_id].add_role(access_role, [project_resource])
 
         visibility = project["visibility"]
         project_resource.set_property("visibility", visibility)
@@ -403,7 +416,7 @@ class OAAGitLab():
 
         result = []
         while True:
-            response = self._perform_get(api_path, headers=headers, params=params, timeout=60)
+            response = self._perform_get(url=api_path, headers=headers, params=params, timeout=60)
             try:
                 body = response.json()
             except RequestsJSONDecodeError as e:

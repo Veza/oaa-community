@@ -37,9 +37,7 @@ Open Authorization API is not currently associated with any open source bodies (
 various teams to pursue open standards over course of time. All OAA resources in this repository are licensed under
 the MIT license.
 
-For any feedback on Open Authorization API - for example, API enrichments, etc. - please open an issue. We encourage you
-to please join our [Slack community](https://join.slack.com/t/veza-oaa-community/shared_invite/zt-1v2epmzqt-Jtb8jJWotJZmkHuDMdpPXA)
-to share the feedback.
+For any feedback on Open Authorization API - for example, API enrichments, etc. - please open an issue.
 
 ## How OAA Works
 OAA works by providing a mechanism to upload authorization information from a target system (e.g. SaaS app,
@@ -101,6 +99,3 @@ connector will come through the community.
 
 ## Contributing
 If you are interested in contributing improvements or new connectors see our [guide](docs/CONTRIBUTING.md)
-
-## Join Us on Slack
-Join us on Slack at [veza-oaa-community](https://join.slack.com/t/veza-oaa-community/shared_invite/zt-1v2epmzqt-Jtb8jJWotJZmkHuDMdpPXA)

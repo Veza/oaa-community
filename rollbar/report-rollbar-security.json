@@ -1,0 +1,117 @@
+{
+    "name": "Rollbar Inventory",
+    "version": 1,
+    "queries": [
+        {
+            "name": "All Rollbar Users",
+            "description": "Count of all Rollbar users",
+            "query_type": "SOURCE_TO_DESTINATION",
+            "source_node_types": {
+                "nodes": [
+                    {
+                        "node_type": "OAA.Rollbar.User"
+                    }
+                ]
+            },
+            "labels": [
+                "inventory"
+            ]
+        },
+        {
+            "name": "Rollbar Users Related to Okta Users",
+            "description": "Rollbar users who's email matches an Okta users primary ID",
+            "query_type": "SOURCE_TO_DESTINATION",
+            "source_node_types": {
+                "nodes": [
+                    {
+                        "node_type": "OAA.Rollbar.User"
+                    }
+                ]
+            },
+            "relates_to_exp": {
+                "specs": [
+                    {
+                        "node_types": {
+                            "nodes": [
+                                {
+                                    "node_type": "OktaUser"
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "name": "Rollbar Users Not Related to Okta Users",
+            "description": "Rollbar users who do not share an identity with any Okta User",
+            "query_type": "SOURCE_TO_DESTINATION",
+            "source_node_types": {
+                "nodes": [
+                    {
+                        "node_type": "OAA.Rollbar.User"
+                    }
+                ]
+            },
+            "relates_to_exp": {
+                "specs": [
+                    {
+                        "node_types": {
+                            "nodes": [
+                                {
+                                    "node_type": "OktaUser"
+                                }
+                            ]
+                        },
+                        "no_relation": true
+                    }
+                ]
+            }
+        },
+        {
+            "name": "Rollbar User within Team Owners",
+            "description": "Rollbar User within Team Owners",
+            "query_type": "SOURCE_TO_DESTINATION",
+            "source_node_types": {
+                "nodes": [
+                    {
+                        "node_type": "OAA.Rollbar.User",
+                        "condition_expression": {
+                            "specs": [
+                                {
+                                    "property": "application_type",
+                                    "value": "Rollbar"
+                                }
+                            ]
+                        }
+                    }
+                ]
+            },
+            "relates_to_exp": {
+                "specs": [
+                    {
+                        "node_types": {
+                            "nodes": [
+                                {
+                                    "node_type": "OAA.Rollbar.Group",
+                                    "condition_expression": {
+                                        "specs": [
+                                            {
+                                                "property": "name",
+                                                "value": "Owners"
+                                            },
+                                            {
+                                                "property": "application_type",
+                                                "value": "Rollbar"
+                                            }
+                                        ]
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        }
+    ]
+}

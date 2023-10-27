@@ -1,5 +1,8 @@
 # Bitbucket Cloud Changelog
 
+## 2023/10/27
+* Increased backoff for API when Bitbucket rate-limit encountered
+
 ## 2023/7/13
 * Added support for refreshing OAuth token
 

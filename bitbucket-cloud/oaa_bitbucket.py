@@ -462,15 +462,18 @@ class OAABitbucket():
         auth = None
         headers = {}
         if self._oauth_token:
-            if self._oauth_expire_time and datetime.now() > self._oauth_expire_time:
-                self._oauth_token = self.bitbucket_oauth_login()
             headers["Authorization"] = f"Bearer {self._oauth_token}"
         else:
             auth = self._http_auth
 
         retries = 0
+        start_time = datetime.now()
         values = []
         while True:
+            if self._oauth_expire_time and datetime.now() > self._oauth_expire_time:
+                self._oauth_token = self.bitbucket_oauth_login()
+                headers["Authorization"] = f"Bearer {self._oauth_token}"
+
             try:
                 response = requests.get(url, auth=auth, headers=headers, params=params, timeout=60)
                 response.raise_for_status()
@@ -491,14 +494,24 @@ class OAABitbucket():
                     break
 
             except requests.exceptions.HTTPError as e:
-                if e.response.status_code in [429, 500, 502, 503, 504] and retries < 5:
+                if e.response.status_code in [500, 502, 503, 504] and retries < 5:
                     log.warning(f"Bitbucket API returned error, {e}")
                     retries += 1
                     log.warning(f"Retrying {retries} of 5")
                     time.sleep(retries * 1)
                     continue
+                elif e.response.status_code == 429:
+                    log.warning(f"Bitbucket API rate limit encountered")
+                    if (datetime.now() - start_time) > timedelta(minutes=70):
+                        log.error("Maximum retry wait time has been exceeded")
+                        raise e
+                    retries += 1
+                    sleep_time = min(retries * 60, 600)
+                    log.warning(f"Backing off, retry {retries}, {sleep_time} seconds")
+                    time.sleep(sleep_time)
                 else:
                     raise e
+
             except requests.exceptions.RequestException as e:
                 log.warning(f"Bitbucket API error making call, {e}")
                 if retries < 5:

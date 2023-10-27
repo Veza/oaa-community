@@ -100,21 +100,21 @@ but will not collect identity information for Bitbucket users.
    ```
 
 ## Application Parameters & Environment Variabls
-| Parameter                             | Environment Variable      | Required | Notes                                                              |
-| ------------------------------------- | ------------------------- | -------- | ------------------------------------------------------------------ |
-| `--workspace`                         | `BITBUCKET_WORKSPACE`     | Yes      | Name of Bitbucket workspace                                        |
-| n/a                                   | `BITBUCKET_CLIENT_KEY`    | Yes*     | Bitbucket Oauth Client Key                                         |
-| n/a                                   | `BITBUCKET_CLIENT_SECRET` | Yes*     | Bitbucket Oauth Client Secret                                      |
-| n/a                                   | `BITBUCKET_USER`          | No       | Bitbucket user for connection (legacy)                             |
-| n/a                                   | `BITBUCKET_APP_KEY`       | No       | App key generated for Bitbucket user  (legacy)                     |
-| `--skip-branch-restriction-discovery` | n/a                       | No       | Skip discovery of branch restriction rules                         |
-| `--veza-url`                          | `VEZA_URL`                | Yes      | URL of Veza instance                                               |
-| n/a                                   | `VEZA_API_KEY`            | Yes      | Veza API key                                                       |
-| n/a                                   | `ATLASSIAN_LOGIN`         | No       | For discovering Bitbucket user identity emails using Atlassian API |
-| n/a                                   | `ATLASSIAN_API_KEY`       | No       | Optional Atlassian API key for Atlassian API                       |
-| `--save-json`                         | n/a                       | No       | Save the OAA JSON to file before upload                            |
-| `--debug`                             | `OAA_DEBUG`               | No       | Enable OAA debug, for environment variable set to any value        |
-| `--create-report`                     | n/a                       | No       | Create or update Veza Report. Defaults to true for first run       |
+| Parameter                             | Environment Variable      | Required | Notes                                                                                         |
+| ------------------------------------- | ------------------------- | -------- | --------------------------------------------------------------------------------------------- |
+| `--workspace`                         | `BITBUCKET_WORKSPACE`     | Yes      | Name of Bitbucket Workspace. Name should be as it appears in the URL when accessint Bitbucket | 
+| n/a                                   | `BITBUCKET_CLIENT_KEY`    | Yes*     | Bitbucket Oauth Client Key                                                                    |
+| n/a                                   | `BITBUCKET_CLIENT_SECRET` | Yes*     | Bitbucket Oauth Client Secret                                                                 |
+| n/a                                   | `BITBUCKET_USER`          | No       | Bitbucket user for connection (legacy)                                                        |
+| n/a                                   | `BITBUCKET_APP_KEY`       | No       | App key generated for Bitbucket user  (legacy)                                                |
+| `--skip-branch-restriction-discovery` | n/a                       | No       | Skip discovery of branch restriction rules                                                    |
+| `--veza-url`                          | `VEZA_URL`                | Yes      | URL of Veza instance                                                                          |
+| n/a                                   | `VEZA_API_KEY`            | Yes      | Veza API key                                                                                  |
+| n/a                                   | `ATLASSIAN_LOGIN`         | No       | For discovering Bitbucket user identity emails using Atlassian API                            |
+| n/a                                   | `ATLASSIAN_API_KEY`       | No       | Optional Atlassian API key for Atlassian API                                                  |
+| `--save-json`                         | n/a                       | No       | Save the OAA JSON to file before upload                                                       |
+| `--debug`                             | `OAA_DEBUG`               | No       | Enable OAA debug, for environment variable set to any value                                   |
+| `--create-report`                     | n/a                       | No       | Create or update Veza Report. Defaults to true for first run                                  |
 
 > * `BITBUCKET_CLIENT_KEY` and `BITBUCKET_CLIENT_SECRET` are not required if using `BITBUCKET_USER` and `BITBUCKET_APP_KEY`
 

@@ -1,0 +1,21 @@
+employee_number,account,first_name,last_name,display_name,preferred_name,work_email,employment_status,active,title,department,manager,start_date,date_terminated,employment_type,tshirt_size
+1001,jdigman,Joscelin,Digman,Joscelin Digman,,jdigman@example.com,HIRED,1,CEO,Exceutives,,2010-12-28,,FULL_TIME,L
+1002,rmartensen,Raimundo,Martensen,Raimundo Martensen,,rmartensen@example.com,HIRED,1,Research Assistant IV,Product Management,1005,2023-05-21,,FULL_TIME,M
+1003,ycleator,Yuri,Cleator,Yuri Cleator,,ycleator@example.com,TERMINATED,0,Manager HR,Human Resources,1001,2013-04-22,2020-11-21,FULL_TIME,S
+1004,tsibbs,Tillie,Sibbs,Tillie Sibbs,,tsibbs@example.com,TERMINATED,0,Senior Support Engineer,Support,1001,2014-11-12,2023-08-26,FULL_TIME,
+1005,ccastanos,Cassandre,Castanos,Cassandre Castanos,,ccastanos@example.com,HIRED,1,Chief Design Engineer,Product Management,1001,2022-09-03,,FULL_TIME,XS
+1006,cheinlein,Claudia,Heinlein,Claudia Heinlein,,cheinlein@example.com,HIRED,1,Recruiter,Human Resources,1003,2017-01-29,,FULL_TIME,
+1007,hgrigorini,Harmonia,Grigorini,Harmonia Grigorini,,hgrigorini@example.com,HIRED,1,Design Engineer,Engineering,1009,2011-07-17,,PART_TIME,XL
+1008,awillbraham,Audre,Willbraham,Audre Willbraham,,awillbraham@example.com,HIRED,1,Product Manager III,Product Management,1005,2016-05-28,,FULL_TIME,XL
+1009,geathorne,Gilligan,Eathorne,Gilligan Eathorne,Gil,geathorne@example.com,HIRED,1,VP Engineering,Engineering,1001,2017-03-18,,FULL_TIME,
+1010,cmacauley,Carline,Macauley,Carline Macauley,,cmacauley@example.com,HIRED,1,Librarian,Training,1005,2012-12-14,,FULL_TIME,L
+1011,noxlade,Nicholas,Oxlade,Nicholas Oxlade,,noxlade@example.com,HIRED,1,Senior Council,Legal,1001,2016-05-06,,FULL_TIME,
+1012,jbockman,Janifer,Bockman,Janifer Bockman,,jbockman@example.com,HIRED,1,Budget/Accounting Analyst III,Legal,1011,2011-12-27,,CONTRACT,S
+1013,mrumin,Maud,Rumin,Maud Rumin,,mrumin@example.com,HIRED,1,Product Manager I,Product Management,1005,2018-09-30,,FULL_TIME,M
+1014,erubinsztein,Electra,Rubinsztein,Electra Rubinsztein,,erubinsztein@example.com,LEAVE,1,Platform Engineer,Engineering,1009,2015-04-26,,FULL_TIME,
+1015,jpattle,Jilli,Pattle,Jilli Pattle,,jpattle@example.com,HIRED,1,Support Engineer II,Services,1004,2020-12-01,,FULL_TIME,L
+1016,fvickery,Ferguson,Vickery,Ferguson Vickery,Furgi,fvickery@example.com,HIRED,1,Account Coordinator,Marketing,1001,2019-04-10,,FULL_TIME,
+1017,kpeascod,Katey,Peascod,Katey Peascod,,kpeascod@example.com,HIRED,1,Research Associate,Services,1004,2020-10-14,,FULL_TIME,M
+1018,cchurn,Carmon,Churn,Carmon Churn,,cchurn@example.com,TERMINATED,0,Research Associate,Business Development,,2017-07-09,2021-02-26,FULL_TIME,
+1019,bcholomin,Brewer,Cholomin,Brewer Cholomin,,bcholomin@example.com,TERMINATED,0,Information Systems Manager,Engineering,1009,2014-08-06,2020-07-02,FULL_TIME,XL
+1020,nstrut,Neila,Strut,Neila Strut,,nstrut@example.com,HIRED,1,Staff Accountant II,Legal,1011,2016-06-08,,FULL_TIME,

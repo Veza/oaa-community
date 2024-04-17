@@ -9,7 +9,11 @@ import sys
 import oaaclient.utils as oaautils
 
 from oaaclient.client import OAAClient, OAAClientError
-from oaaclient.templates import CustomApplication, CustomPermission, OAAPermission, LocalRole
+from oaaclient.templates import CustomApplication, CustomPermission, OAAPermission, OAAPropertyType, LocalRole
+
+# Depending on how the CSV files were exported, the encoding may need to be updated
+CSV_ENCODING="utf-8-sig"
+# CSV_ENCODING="windows-1252"
 
 logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s', level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -36,7 +40,7 @@ DEFAULT_ROLE_PERMISSIONS = {
 
 def validate_csv(headers: list[str], entries: list[dict[str, str]], path: str) -> bool:
     """Validate CSV Headers
-    
+
     Ensures that required headers exist in the data read from CSV
 
     Args:
@@ -58,11 +62,12 @@ def validate_csv(headers: list[str], entries: list[dict[str, str]], path: str) -
     return True
 
 
-def read_csv(path: str) -> list:
+def read_csv(path: str, encoding=CSV_ENCODING) -> list:
     """Read CSV Helper
 
     Args:
         path (str): path to CSV file
+        encoding (str): Encoding for reading file, defaults to the global CSV_ENCODING
 
     Returns:
         list: list of rows as dictionaries
@@ -71,7 +76,7 @@ def read_csv(path: str) -> list:
     result = []
 
     try:
-        with open(path) as f:
+        with open(path, encoding=encoding, errors="replace") as f:
             for r in csv.DictReader(f):
                 result.append(r)
     except OSError as e:
@@ -129,7 +134,7 @@ def load_groups(app: CustomApplication, group_csv_path: str) -> None:
     # load the csv data into a dict
     log.info(f"Loading groups from {group_csv_path}")
     group_entries = read_csv(group_csv_path)
-    
+
     # validate header columns and file data
     if validate_csv(["group_id", "user_name"], group_entries, group_csv_path):
 
@@ -163,7 +168,7 @@ def load_groups(app: CustomApplication, group_csv_path: str) -> None:
 
 def load_permissions(app: CustomApplication, permissions_csv_path: str) -> None:
     """Load Permissions definitions
-    
+
     Creates custom permissions to map app-defined permissions to Veza canonical permissions
 
     Args:
@@ -196,11 +201,11 @@ def load_permissions(app: CustomApplication, permissions_csv_path: str) -> None:
             app.define_custom_permission(CustomPermission(permission_name, canonical_permission))
         else:
             log.warning(f"permission {permission}: {permission_entries[permission]} could not be mapped to Veza canonical permission type; setting to NonData")
-            app.define_custom_permission(CustomPermission(permission, [OAAPermission.NonData]))  
+            app.define_custom_permission(CustomPermission(permission, [OAAPermission.NonData]))
     else:
         log.warning(f"permissions file {permissions_csv_path} empty; skipping")
 
-    # add default permissions 
+    # add default permissions
     for permission in PERMISSIONS_MAP:
         app.define_custom_permission(CustomPermission(permission, PERMISSIONS_MAP[permission]))
 
@@ -209,7 +214,7 @@ def load_permissions(app: CustomApplication, permissions_csv_path: str) -> None:
 
 def load_role_permissions(app: CustomApplication, role_permissions_csv_path: str) -> None:
     """Load Role permissions
-    
+
     Args:
         app (CustomApplication): OAA Custom Application object
         role_permissions_csv_path (str): path to CSV containing role permissions
@@ -347,6 +352,9 @@ def load_users(app: CustomApplication, users_csv_path: str) -> None:
     log.info(f"Loading users from {users_csv_path}")
     user_entries = read_csv(users_csv_path)
 
+    # Define any necessary custom properties
+    app.property_definitions.define_local_user_property("email", OAAPropertyType.STRING)
+
     # validate header columns and file data
     if validate_csv(["user_name"], user_entries, users_csv_path):
 
@@ -367,7 +375,8 @@ def load_users(app: CustomApplication, users_csv_path: str) -> None:
 
             # if there is an email, add it to the user as an identity
             if user_entry.get("email"):
-                new_user.add_identities([user_entry["email"]])
+                new_user.add_identity(user_entry["email"])
+                new_user.set_property("email", user_entry["email"])
 
             # populate created_at and last_login timestamps if found
             created_at = user_entry.get("created_at")
@@ -412,7 +421,7 @@ def run(veza_url: str, veza_api_key: str, application_name: str, save_json: bool
         log.info("Found existing provider")
     else:
         log.info("Creating Provider {provider_name}")
-        provider = veza_con.create_provider(application_name, "application", base64_icon=OAA_ICON_B64)        
+        provider = veza_con.create_provider(application_name, "application", base64_icon=OAA_ICON_B64)
     log.info(f"Provider: {provider['name']} ({provider['id']})")
 
     #push data
@@ -433,7 +442,6 @@ def run(veza_url: str, veza_api_key: str, application_name: str, save_json: bool
             if hasattr(e, "details"):
                 for d in e.details:
                     log.error(d)
-
 
     return
 

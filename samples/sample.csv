@@ -1,0 +1,4 @@
+USER_ID,USER_NAME,EMAIL,IS_ACTIVE,LAST_LOGIN,ROLE
+10001,Adam Thompson,athompson@example.com,1,2023-10-20 13:05:34,Admin
+10001,Adam Thompson,athompson@example,1,2023-10-20 13:05:34,User
+10003,Bob Smith,bsmith@example,0,2023-03-20 03:34:23,User

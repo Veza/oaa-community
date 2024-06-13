@@ -12,7 +12,8 @@ Please ensure that any conflicts with the current `main` branch have been resolv
 ## New Connectors
 Any new connectors should follow these basic guidelines:
 
-* The new connector must be in its own folder named after the service or application the connector is for.
+* The new connector must be in its own folder named (nested under the [/connectors](connectors/) folder)
+after the service or application the connector is for.
 * The folder must contain a `README.md` file that includes the following:
   - Explanation of what the connector does, what entities it collects and any limitations.
   - Setup instructions for the application/service, such as how to configure any required API credentials.

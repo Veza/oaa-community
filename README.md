@@ -37,7 +37,7 @@ Veza processes this schema mapping to integrate metadata from the new target sys
 Graph, which maps which identities have what permissions to what resources. Veza combines this information with
 discovered data from Identity providers to expand group memberships and correlate identities. Identities can be local to
 that application or linked to external Identity Providers (IdP) like Okta or AzureAD. The Veza schema can capture and
-represent both standard [Effective Permissions](https://developer.veza.com/oaa/guide/core-concepts/using-oaa-templates.html#permissions)
+represent both standard [CRUD](https://developer.veza.com/oaa/guide/core-concepts/using-oaa-templates.html#permissions)
 (Create, Read, Update, and Delete) as well as system-specific permissions (like “Admin” or “Operator”).
 
 Once a target application or system is integrated via OAA into Veza, it acts like any other data source. OAA-integrated

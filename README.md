@@ -3,7 +3,7 @@
 # Open Authorization API (OAA) Community
 
 OAA Community is a repository of production quality [example connectors](/connectors/) and [quickstart samples](/quickstarts/)
-that can be consumed under open source [license](./LICENSE). 
+that can be consumed under an open source (MIT) [license](./LICENSE). 
 We provide these connectors to help customers get up and running quickly developing their own connectors,
 whether they are for in-house, custom applications or systems that aren't yet part of Veza's native integration set.
 

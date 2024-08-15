@@ -21,10 +21,13 @@ import logging
 import os
 import sys
 from datetime import datetime
+from dotenv import load_dotenv
+
 
 logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s', level=logging.INFO)
 log = logging.getLogger()
 
+load_dotenv(dotenv_path="../../.env")
 
 # Update the name of the HRIS Vendor to an appropriate value
 HRIS_VENDOR="CSVExample"

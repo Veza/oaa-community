@@ -44,7 +44,7 @@ Contains group information - one user group assignment per line
 ### Roles (roles.csv)
 
 Contains role information - one assignment per line
-Note: One or both of `group_id` and `user_name` must be present per-line
+Note: One or both of `group_id` and `user_name` must be present per line
 
 |Column       | Required / Optional     | Description          |
 |------------ |------------------------ |--------------------- |

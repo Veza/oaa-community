@@ -28,6 +28,11 @@ from oaaclient.templates import CustomIdPProvider, OAAPropertyType
 import os
 import sys
 
+from dotenv import load_dotenv
+
+load_dotenv(dotenv_path="../.env")
+
+
 
 def main():
 
@@ -64,8 +69,11 @@ def main():
     idp.property_definitions.define_user_property("region", OAAPropertyType.STRING)
     idp.property_definitions.define_user_property("is_contractor", OAAPropertyType.BOOLEAN)
 
-    idp.users['willis'].set_property("region", "NorthAmerica")
-    idp.users['willis'].set_property("is_contractor", True)
+    # idp.users['willis'].set_property("region", "NorthAmerica")
+    # idp.users['willis'].set_property("is_contractor", True)
+
+    idp.users['cwilliams'].set_property("region", "NorthAmerica")
+    idp.users['cwilliams'].set_property("is_contractor", True)
 
     # Create Groups
     idp.add_group("developers")

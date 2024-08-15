@@ -1,0 +1,2 @@
+identity,email,name,full_name,is_active,is_guest,manager_id
+fvargas,fvargas@test.com,fvargas,Frank Vargas,true,false,evargas

@@ -1,2 +1,0 @@
-click>=8.1
-oaaclient>=1.1.7,<2.0

@@ -20,8 +20,7 @@ and resources.
 
 Customers that utilize a custom Identity Provider (or an IdP that doesn't have a native Veza integration) can use the OAA 
 [Custom Identity Provider Template](https://developer.veza.com/oaa/reference/templates/custom-identity-provider.html)
-to describe federated users and groups. This sample app generates a custom payload containing users, groups, and identity metadata, using the
-`CustomIdPProvider` class.
+to describe users and groups. This sample app generates a custom payload containing users, groups, and identity metadata, using the `CustomIdPProvider` class.
 
 It additionally demonstrates OAA's support for AWS role entitlements, for scenarios where customers employ methods of enabling users to assume AWS roles that cannot be discovered by Veza's native AWS integration.
 

@@ -4,7 +4,7 @@
 Reads user properties from the input file, populates an OAA payload,
 and creates a new OAA identity provider containing the imported users.
 
-Expected CSV headers are `identity,name,full_name,is_active,is_guest,manager_id`
+Expected CSV headers are `identity,email,name,full_name,is_active,is_guest,manager_id`
 Can be updated to match custom column headings or apply custom properties.
 
 Example:
@@ -25,16 +25,22 @@ https://opensource.org/licenses/MIT.
 
 from oaaclient.client import OAAClient, OAAClientError
 from oaaclient.templates import CustomIdPProvider
+
 import click
 import csv
 import logging
 import os
 import sys
 
+from dotenv import load_dotenv
+
+load_dotenv(
+    # Uncomment and use your custom env location e.g.
+    # dotenv_path="../../.env"
+    )
 
 logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s', level=logging.INFO)
 log = logging.getLogger()
-
 
 def load_users(idp: CustomIdPProvider, source: str) -> None:
     """Populate the idp with user from the source csv file"""
@@ -81,11 +87,14 @@ def load_users(idp: CustomIdPProvider, source: str) -> None:
 @click.option("--datasource", required=True)
 @click.option("--save-json", is_flag=True)
 @click.argument("file", required=True)
+
 def main(provider, datasource, save_json, file):
 
     # load the Veza URL and API key from the environment
     veza_url = os.getenv("VEZA_URL")
     veza_api_key = os.getenv("VEZA_API_KEY")
+
+    print(f'veza url: {veza_url}')
 
     if not (veza_url or veza_api_key):
         log.error("Must set VEZA_URL and VEZA_API_KEY")

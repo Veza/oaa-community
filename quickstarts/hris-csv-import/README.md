@@ -46,10 +46,13 @@ pip install -r requirements.txt
 1. Export the Veza API Key
 
    ```
-   export VEZA_API_KEY="abc123...."
+   export VEZA_API_KEY="Zdkemfds..."
    ```
 
-2. Run the importer. Provide the path the CSV file to import
+   Or configure a `.env` file for [`python-dotenv`](https://pypi.org/project/python-dotenv/): Use the provided sample `.env.sample` as a guide. 
+
+
+2. Run the importer. Provide the path to the CSV file to import
 
     ```
     ./hris_import_csv --veza-url https://example.vezacloud.com report_export.csv

@@ -25,7 +25,6 @@ https://opensource.org/licenses/MIT.
 
 from oaaclient.client import OAAClient, OAAClientError
 from oaaclient.templates import CustomIdPProvider
-from dotenv import load_dotenv
 
 import click
 import csv
@@ -33,11 +32,15 @@ import logging
 import os
 import sys
 
+from dotenv import load_dotenv
+
+load_dotenv(
+    # Uncomment and use your custom env location e.g.
+    # dotenv_path="../../.env"
+    )
 
 logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s', level=logging.INFO)
 log = logging.getLogger()
-
-load_dotenv(dotenv_path="../../.env")
 
 def load_users(idp: CustomIdPProvider, source: str) -> None:
     """Populate the idp with user from the source csv file"""

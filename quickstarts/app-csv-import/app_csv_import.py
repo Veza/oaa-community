@@ -7,11 +7,15 @@ import os
 import sys
 
 import oaaclient.utils as oaautils
-
 from oaaclient.client import OAAClient, OAAClientError
 from oaaclient.templates import CustomApplication, CustomPermission, OAAPermission, OAAPropertyType, LocalRole
 
 from dotenv import load_dotenv
+
+load_dotenv(
+    # Uncomment and use your custom env location e.g.
+    # dotenv_path="../../.env"
+    )
 
 # Depending on how the CSV files were exported, the encoding may need to be updated
 CSV_ENCODING="utf-8-sig"
@@ -19,8 +23,6 @@ CSV_ENCODING="utf-8-sig"
 
 logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s', level=logging.INFO)
 log = logging.getLogger(__name__)
-
-load_dotenv(dotenv_path="../../.env")
 
 # a map of strings to OAAPermission types
 PERMISSIONS_MAP = {

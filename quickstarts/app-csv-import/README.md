@@ -99,9 +99,12 @@ Ensure pip is up-to-date; dependencies will fail to install unless pip >= 21.0.
 Install the requirements with Python 3.8+: pip3 install -r requirements.txt
 
 1. Export the appropriate environmental variables. Variables not set can be passed via arguments at run time.
-```
-export VEZA_API_KEY="Zdkemfds..."
-```
-1. Run the connector:
+    ```
+    export VEZA_API_KEY="Zdkemfds..."
+    ```
+
+    Or configure a `.env` file for [`python-dotenv`](https://pypi.org/project/python-dotenv/): Use the provided sample `.env.sample` as a guide. 
+
+2. Run the connector:
 
     `app_csv_import.py --veza-url https://example.vezatrial.ai` --application-name ExampleApp

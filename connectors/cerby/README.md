@@ -15,10 +15,10 @@ This connector utilizes the Cerby API to extract information about applications 
 
 This connector uses the OAA Application template to map applications and identities to permissions. The following table shows how Custom Application entities correspond to Cerby entities:
 
-| Cerby       | Generic Application |
-| ----------- |---------------------|
-| application | Application         |
-| user        | Workspace User      |
+| Cerby       | OAA Custom Application Template |
+| ----------- |---------------------------------|
+| application | Custom Resource                 |
+| user        | Local User                      |
 
 ### Custom Properties
 
@@ -75,6 +75,7 @@ Run the connector:
 | `--push`       | n/a                  | Push all synchronized data to Veza                                                  |
 
 ## Notes
+Once entities have been synchronized, call the `--push` command to push the data to Veza. This will create the necessary entities and relationships in the Veza instance.
 
 ### Cerby Endpoints Used
 

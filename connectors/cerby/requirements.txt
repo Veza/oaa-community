@@ -1,0 +1,4 @@
+oaaclient
+python-dotenv
+requests
+argsparse
